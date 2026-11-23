@@ -8,7 +8,7 @@ Agenda web para estudantes que trabalham. O sistema cruza prazos, tempo livre e 
 
 ## Abrir no Windows
 
-Execute `Abrir_TimeCTRL.cmd` e abra [http://127.0.0.1:8082](http://127.0.0.1:8082). A primeira abertura inicializa o banco local. Mantenha a janela do servidor aberta durante o uso. Se o TimeCTRL já estiver rodando na mesma porta, o arquivo abre a página no navegador.
+Dê dois cliques em `Abrir_TimeCTRL.cmd`. O arquivo inicia o PHP e abre [http://127.0.0.1:8082](http://127.0.0.1:8082) no navegador padrão quando a página estiver pronta. A primeira abertura inicializa o banco local. Mantenha a janela do servidor aberta durante o uso. Se a aba não abrir, digite o endereço no navegador. Use `TIMECTRL_PORT` para trocar a porta caso a 8082 já esteja ocupada.
 
 Na pasta que contém este README, abra o PowerShell e execute:
 

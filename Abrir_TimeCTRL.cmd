@@ -15,12 +15,13 @@ if errorlevel 1 (
 if not defined TIMECTRL_PORT set "TIMECTRL_PORT=8082"
 curl.exe --noproxy "*" --silent --fail --max-time 2 "http://127.0.0.1:%TIMECTRL_PORT%/" | findstr /L /C:"TimeCTRL</title>" >nul
 if not errorlevel 1 (
-  start "" "http://127.0.0.1:%TIMECTRL_PORT%/"
+  if not defined TIMECTRL_NO_BROWSER start "" "http://127.0.0.1:%TIMECTRL_PORT%/"
   exit /b 0
 )
 
 if not exist "var\sessions" mkdir "var\sessions"
 echo Iniciando TimeCTRL em http://127.0.0.1:%TIMECTRL_PORT%/
 echo Mantenha esta janela aberta durante o uso. Pressione Ctrl+C para parar.
+if not defined TIMECTRL_NO_BROWSER start "" /B powershell.exe -NoProfile -Command "$url = 'http://127.0.0.1:' + $env:TIMECTRL_PORT + '/'; for ($i = 0; $i -lt 25; $i++) { $page = curl.exe --noproxy '*' --silent --fail --max-time 1 $url; if ($page -match 'TimeCTRL</title>') { Start-Process $url; exit }; Start-Sleep -Milliseconds 300 }"
 "%TIMECTRL_PHP_EXE%" -d "session.save_path=var/sessions" -S "127.0.0.1:%TIMECTRL_PORT%" -t public
 if errorlevel 1 pause
