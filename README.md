@@ -2,7 +2,7 @@
 
 Agenda web para estudantes que trabalham. O sistema cruza prazos, tempo livre e interesses informados pelo usuário para sugerir o próximo passo.
 
-**Integrantes:** Diego Henrique Pereira Gaig, Bruno Lealdine Rodrigues de Araujo e Miguel França Vita.
+**Integrantes:** Diego Henrique Pereira Gaiguerra Vaz, Bruno Lealdine Rodrigues de Araujo e Miguel França Vita.
 
 **Disciplina:** Tópicos Especiais em Informática · Prof. David Silva.
 
