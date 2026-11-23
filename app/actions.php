@@ -241,6 +241,9 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 $message = 'Rotina semanal removida.';
                 break;
             case 'save-exception':
+                if (field('occurrence_day') !== $day) {
+                    throw new DomainException('A data da agenda mudou. Selecione o dia e abra o horário novamente.');
+                }
                 $id = number('rule_id', 1, PHP_INT_MAX);
                 $rule = owned($db, 'recurring_windows', $uid, $id);
                 if (!repeatsOn($rule, at($day))) {

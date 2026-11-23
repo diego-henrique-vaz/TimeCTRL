@@ -77,7 +77,9 @@ $weekly = ['title'=>'Trabalho habitual','kind'=>'work','weekdays'=>['1','2','3',
     'first_day'=>'2026-11-19','start_time'=>'07:30','end_time'=>'14:30'];
 change($db, $uid, 'save-rule', $weekly);
 $ruleId = (string) userData(database(), $uid, '2026-11-19')['rules'][0]['id'];
-$exception = ['rule_id'=>$ruleId,'change_kind'=>'change','start_time'=>'07:30','end_time'=>'12:00'];
+$exception = ['rule_id'=>$ruleId,'occurrence_day'=>'2026-11-19','change_kind'=>'change','start_time'=>'07:30','end_time'=>'12:00'];
+verify(rejects(fn() => change($db, $uid, 'save-exception', array_replace($exception, ['occurrence_day'=>'2026-11-20'])), 'data da agenda mudou'),
+    'uma data divergente não altera a rotina do dia aberto');
 verify(rejects(fn() => change($db, $other, 'save-exception', $exception), 'não está disponível'), 'ajustes de rotina respeitam a conta');
 verify(rejects(fn() => change($db, $uid, 'save-rule', array_replace($weekly, ['weekdays'=>[]])), 'pelo menos um'), 'rotina exige ao menos um dia');
 change($db, $uid, 'save-exception', $exception);

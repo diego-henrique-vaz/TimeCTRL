@@ -96,6 +96,23 @@ $notice = $_SESSION['notice'] ?? '';
 unset($_SESSION['notice']);
 $data = $account ? userData($db, (int) $account['id'], $day) : null;
 $summary = $data ? plan($data, $focus) : null;
-$suggestion = $data && $day === $today ? recommendation($data, $summary, $focus) : null;
+$dayRanges = $summary ? rangesOnDay($summary['ranges'], $day, $clock) : [];
+$suggestion = $leisureOption = null;
+$leisureAlternative = false;
+if ($data && $view === 'today') {
+    $mode = $data['choice']['mode'];
+    $suggestion = $day === $today ? recommendation($data, $summary, $clock) : null;
+    if ($mode === 'leisure' || $mode === 'rest' || ($mode === 'balance' && ($suggestion['kind'] ?? null) !== 'interest')) {
+        [$leisure, $rest] = upcomingLeisure($data, $clock, $dayRanges);
+        if ($mode === 'balance' && $leisure) {
+            $afterTasks = rangesOnDay($summary['unallocated'], $day, $clock);
+            [$compatible] = upcomingLeisure($data, $clock, $afterTasks);
+            $leisureOption = $compatible ?? $leisure;
+            $leisureAlternative = $compatible === null;
+        } elseif ($mode !== 'balance') {
+            $suggestion = $mode === 'leisure' ? $leisure : $rest;
+        }
+    }
+}
 $holiday = HOLIDAYS[$day] ?? null;
 require __DIR__ . '/../views/page.php';

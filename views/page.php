@@ -22,6 +22,13 @@ function inputStamp(string $value): string
     return str_replace(' ', 'T', $value);
 }
 
+function agendaDate(string $day): string
+{
+    $date = at($day);
+    $names = [1 => 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+    return $names[(int) $date->format('N')] . ', ' . $date->format('d/m/Y');
+}
+
 function choices(array $options, string|int $value): void
 {
     foreach ($options as $key => $label) {
@@ -97,7 +104,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
     <a href="<?= h(url()) ?>" class="brand"><span class="mark" aria-hidden="true">T</span>TimeCTRL</a>
     <nav aria-label="Principal">
         <?php foreach ($nav as $route => $name): ?>
-            <a <?= $route === $view ? 'aria-current="page"' : '' ?> href="<?= h(url($route, $dayArg)) ?>"><?= h($name) ?></a>
+            <a <?= $route === $view ? 'aria-current="page"' : '' ?> href="<?= h(url($route)) ?>"><?= h($name) ?></a>
         <?php endforeach; ?>
     </nav>
     <form class="account" method="post" action="<?= h(url()) ?>">
@@ -109,19 +116,24 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
         <h1><?= h($headings[$view]) ?></h1>
         <?php if (in_array($view, ['today', 'agenda'], true)): ?>
         <div class="actions" aria-label="Navegação por data">
+            <a class="subtle link-button" href="<?= h(url($view)) ?>" <?= $day === $today ? 'aria-current="date"' : '' ?>>Hoje</a>
             <?php if ($day > $today): ?>
                 <a class="subtle link-button" href="<?= h(url($view, ['date' => at($day)->modify('-1 day')->format('Y-m-d')])) ?>" aria-label="Dia anterior">‹</a>
-                <a class="subtle link-button" href="<?= h(url($view)) ?>">Hoje</a>
             <?php endif; ?>
-        <form method="get" action="/" class="date-picker">
-            <input type="hidden" name="view" value="<?= h($view) ?>">
-            <label><span class="sr">Data da agenda</span><input name="date" type="date" min="<?= h($today) ?>" value="<?= h($day) ?>"></label>
-            <button class="subtle">Ver dia</button>
-        </form>
+            <form method="get" action="/" class="date-picker">
+                <input type="hidden" name="view" value="<?= h($view) ?>">
+                <label><span class="sr">Data da agenda</span><input id="agenda-date" name="date" type="date" min="<?= h($today) ?>" value="<?= h($day) ?>"></label>
+                <button class="subtle">Ver dia</button>
+            </form>
             <a class="subtle link-button" href="<?= h(url($view, ['date' => at($day)->modify('+1 day')->format('Y-m-d')])) ?>" aria-label="Próximo dia">›</a>
         </div>
         <?php endif; ?>
     </header>
+    <?php if (in_array($view, ['today', 'agenda'], true)): ?>
+        <p class="view-date<?= $day === $today ? '' : ' view-date-future' ?>" data-view-date>
+            <strong><?= $day === $today ? 'Hoje' : 'Data selecionada' ?></strong> · <?= h(agendaDate($day)) ?>
+        </p>
+    <?php endif; ?>
     <?php if ($notice): ?><p class="flash" role="status"><?= h($notice) ?></p><?php endif; ?>
     <?php if ($error): ?><p class="flash warning" role="alert"><?= h($error) ?></p><?php endif; ?>
 
@@ -138,8 +150,11 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                 <?php if ($summary['current'] && $day === $today): ?>
                     <p class="metric" data-free-minutes><?= duration(...$summary['current']) ?><span> min livres agora</span></p>
                     <p>Até <?= h(at($summary['current'][1])->format('H:i')) ?>.</p>
-                <?php elseif ($day === $today): ?>
-                    <p>Você não tem um intervalo livre cadastrado neste momento.</p>
+                <?php elseif ($dayRanges): ?>
+                    <p>Próximo horário livre <?= $day === $today ? 'de hoje' : 'neste dia' ?>:</p>
+                    <p class="info-line" data-next-free><?= h(substr($dayRanges[0][0], 11)) ?>–<?= h(substr($dayRanges[0][1], 11)) ?> · <?= duration(...$dayRanges[0]) ?> min</p>
+                <?php else: ?>
+                    <p>Nenhum intervalo livre restante nesta data. <a href="<?= h(url('agenda', $dayArg)) ?>">Ver agenda</a></p>
                 <?php endif; ?>
                 <?php if ($suggestion): ?>
                     <div class="recommendation" data-recommendation="<?= h($suggestion['kind']) ?>">
@@ -148,8 +163,8 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                         <p class="time"><?= h(at($suggestion['start'])->format('H:i')) ?>–<?= h(at($suggestion['end'])->format('H:i')) ?></p>
                         <?php proposalForm($suggestion, $view, $dayArg); ?>
                     </div>
-                <?php elseif ($summary['current'] && $day === $today): ?>
-                    <p class="recommendation">Nenhuma sugestão disponível se encaixa com essa escolha e esse horário.</p>
+                <?php elseif ($dayRanges && ($data['choice']['mode'] !== 'balance' || !$leisureOption)): ?>
+                    <p class="recommendation">Nenhuma sugestão se encaixa no tempo disponível para esse foco.</p>
                 <?php endif; ?>
             </section>
             <section class="panel">
@@ -171,6 +186,21 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                 </details>
             </section>
         </div>
+        <?php if ($leisureOption): ?>
+            <section class="panel" data-leisure-option>
+                <h2>Sugestão de lazer</h2>
+                <div class="recommendation">
+                    <h3><?= h($leisureOption['title']) ?></h3>
+                    <p><?= h($leisureOption['reason']) ?></p>
+                    <p><?= $leisureAlternative ? 'Este horário coincide com um encaixe sugerido para tarefa. Confira os prazos antes de reservar.'
+                        : 'Este horário cabe junto com os encaixes sugeridos para as tarefas.' ?></p>
+                    <p class="time"><?= h(stamp($leisureOption['start'])) ?>–<?= h(substr($leisureOption['end'], 11)) ?></p>
+                    <?php proposalForm($leisureOption, $view, $dayArg); ?>
+                </div>
+            </section>
+        <?php elseif ($dayRanges && !$data['interests'] && in_array($data['choice']['mode'], ['balance', 'leisure'], true)): ?>
+            <p class="panel"><a href="<?= h(url('interests')) ?>">Cadastre um interesse</a> para receber sugestões de lazer.</p>
+        <?php endif; ?>
         <section class="panel lists">
             <h2>Prazos e conflitos</h2>
             <?php if (!$summary['late'] && !$summary['withoutTime'] && !$summary['beyondHorizon'] && !$summary['conflicts'] && !$summary['near']): ?>
@@ -313,9 +343,11 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                         </summary>
                         <div class="stack inset">
                         <?php if (isset($event['rule_id']) && $event['occurrence_day'] === $day): ?>
-                            <form method="post" class="stack" action="<?= h(url($view, $dayArg)) ?>">
+                            <form method="post" class="stack" action="<?= h(url($view, ['date' => $day])) ?>">
                                 <?php fields('save-exception'); ?><input type="hidden" name="rule_id" value="<?= h($event['rule_id']) ?>">
-                                <strong>Ajustar só este dia</strong>
+                                <input type="hidden" name="occurrence_day" value="<?= h($day) ?>">
+                                <strong>Ajustar só em <?= h(at($day)->format('d/m/Y')) ?></strong>
+                                <p class="muted">Para mudar outra data, <a href="#agenda-date">escolha o dia na agenda</a>.</p>
                                 <div class="form-grid">
                                     <label>Início neste dia<input type="time" name="start_time" required value="<?= h(substr($event['start_at'], 11)) ?>"></label>
                                     <label>Fim neste dia<input type="time" name="end_time" required value="<?= h(substr($event['end_at'], 11)) ?>"></label>
@@ -383,10 +415,9 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
         </div>
         <section class="panel lists">
             <h2>Tempo disponível</h2>
-            <?php $visible = false;
-            foreach ($summary['ranges'] as [$a, $b]): if (!overlaps($a, $b, $from, $until) || $b <= timeKey($focus)) continue; $visible = true; ?>
-                <p class="info-line"><?= h(stamp(max($a, $from, timeKey($focus)))) ?>–<?= h(at(min($b, $until))->format('H:i')) ?> · <?= duration(max($a, $from, timeKey($focus)), min($b, $until)) ?> min</p>
-            <?php endforeach; if (!$visible): ?><p class="muted">Nenhum intervalo livre restante nesta data.</p><?php endif; ?>
+            <?php foreach ($dayRanges as [$a, $b]): ?>
+                <p class="info-line"><?= h(stamp($a)) ?>–<?= h(substr($b, 11)) ?> · <?= duration($a, $b) ?> min</p>
+            <?php endforeach; if (!$dayRanges): ?><p class="muted">Nenhum intervalo livre restante nesta data.</p><?php endif; ?>
         </section>
 
     <?php elseif ($view === 'interests'): ?>

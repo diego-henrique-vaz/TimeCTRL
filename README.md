@@ -27,7 +27,7 @@ Inicie MySQL no painel do XAMPP. Crie um banco `timectrl`, um usuário com acess
 
 1. Cadastre tarefas com prazo, duração e prioridade.
 2. Informe seus horários livres e compromissos na agenda.
-3. Em **Meu dia**, escolha entre tarefas, lazer, descanso ou equilíbrio. Confira os encaixes sugeridos e os alertas de prazos.
+3. Em **Meu dia**, escolha entre tarefas, lazer, descanso ou equilíbrio. No modo equilíbrio, o lazer também pode aparecer em um bloco mais tarde no dia. Se o único horário coincidir com um encaixe de tarefa ainda não aceito, o painel avisa antes de você decidir. Os alertas de prazos continuam disponíveis.
 4. Em **Interesses**, salve jogos, filmes, séries, animes e livros. A duração é o tempo estimado da próxima sessão. O campo de detalhe pode conter algo como “ler um capítulo”.
 5. Em **Hábitos**, informe as atividades que já fez e configure suas metas. As sugestões usam esses registros e as preferências. A agenda só reserva um horário quando você aceita.
 

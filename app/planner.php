@@ -163,6 +163,19 @@ function intervalFits(array $ranges, string $start, string $end): bool
     return false;
 }
 
+function rangesOnDay(array $ranges, string $day, DateTimeImmutable $clock): array
+{
+    $from = max($day . ' 00:00', timeKey($clock));
+    $until = timeKey(at($day)->modify('+1 day'));
+    $available = [];
+    foreach ($ranges as [$start, $end]) {
+        if (overlaps($start, $end, $from, $until)) {
+            $available[] = [max($start, $from), min($end, $until)];
+        }
+    }
+    return $available;
+}
+
 function orderedTasks(array $tasks, bool $byPriority = false): array
 {
     usort($tasks, static fn(array $a, array $b): int =>
@@ -249,7 +262,8 @@ function plan(array $data, DateTimeImmutable $clock): array
             }
         }
     }
-    return compact('ranges', 'current', 'taskNow', 'forecasts', 'late', 'withoutTime', 'beyondHorizon', 'near', 'conflicts');
+    return compact('ranges', 'current', 'taskNow', 'forecasts', 'late', 'withoutTime', 'beyondHorizon', 'near', 'conflicts')
+        + ['unallocated' => $projected];
 }
 
 function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current): array
@@ -258,12 +272,14 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
         return [null, null];
     }
     [$start, $end] = $current;
-    $week = $clock->modify('monday this week')->format('Y-m-d');
-    $today = $clock->format('Y-m-d');
+    $date = at($start);
+    $week = $date->modify('monday this week')->format('Y-m-d');
+    $day = $date->format('Y-m-d');
+    $now = timeKey($clock);
     $reading = $gaming = 0;
     $busyDays = [];
     foreach ($data['activities'] as $entry) {
-        if ($entry['log_day'] > $today) {
+        if ($entry['log_day'] > $day) {
             continue;
         }
         if ($entry['log_day'] >= $week) {
@@ -272,6 +288,13 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
         }
         if (in_array($entry['kind'], ['work', 'study'], true)) {
             $busyDays[$entry['log_day']] = true;
+        }
+    }
+    $reserved = [];
+    $dayEnd = timeKey($date->setTime(0, 0)->modify('+1 day'));
+    foreach ($data['blocks'] as $block) {
+        if (overlaps($block['start_at'], $block['end_at'], $day . ' 00:00', $dayEnd)) {
+            $reserved[$block['kind'] . ':' . $block['item_id']] = true;
         }
     }
     $goals = $data['goals'];
@@ -285,7 +308,7 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
     foreach ($items as $item) {
         $key = 'interest:' . $item['id'];
         $finish = addMinutes($start, (int) $item['minutes']);
-        if ($item['progress'] === 'done' || $finish > $end || !allowedSuggestion($data, $key, $start)
+        if ($item['progress'] === 'done' || $finish > $end || isset($reserved[$key]) || !allowedSuggestion($data, $key, $now)
             || ($item['category'] === 'game' && $cap && $gaming + (int) $item['minutes'] > $cap)) {
             continue;
         }
@@ -302,18 +325,32 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
     }
     $finish = addMinutes($start, (int) $goals['rest_minutes']);
     $rest = null;
-    if ($finish <= $end && $goals['rest_minutes'] > 0 && allowedSuggestion($data, 'rest:0', $start)) {
+    if ($finish <= $end && $goals['rest_minutes'] > 0 && !isset($reserved['rest:0']) && allowedSuggestion($data, 'rest:0', $now)) {
         $streak = 0;
-        $day = isset($busyDays[$today]) ? $clock : $clock->modify('-1 day');
-        while (isset($busyDays[$day->format('Y-m-d')])) {
+        $activityDate = isset($busyDays[$day]) ? $date : $date->modify('-1 day');
+        while (isset($busyDays[$activityDate->format('Y-m-d')])) {
             $streak++;
-            $day = $day->modify('-1 day');
+            $activityDate = $activityDate->modify('-1 day');
         }
         $rest = ['key' => 'rest:0', 'kind' => 'rest', 'id' => 0, 'title' => 'Reservar uma pausa',
             'start' => $start, 'end' => $finish, 'reason' => 'Há um horário livre suficiente para a pausa que você configurou.',
             'goalReached' => $goals['busy_days'] > 0 && $streak >= $goals['busy_days']];
         if ($rest['goalReached']) {
             $rest['reason'] = "Você registrou $streak dias seguidos com trabalho ou estudo. Há tempo livre para uma pausa.";
+        }
+    }
+    return [$leisure, $rest];
+}
+
+function upcomingLeisure(array $data, DateTimeImmutable $clock, array $ranges): array
+{
+    $leisure = $rest = null;
+    foreach ($ranges as $range) {
+        [$interestInSlot, $restInSlot] = leisureOptions($data, $clock, $range);
+        $leisure ??= $interestInSlot;
+        $rest ??= $restInSlot;
+        if ($leisure && $rest) {
+            break;
         }
     }
     return [$leisure, $rest];
