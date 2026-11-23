@@ -41,11 +41,11 @@ Ao abrir um horário recorrente em **Intervalos cadastrados**, use **Salvar só 
 
 As tabelas adicionais são criadas automaticamente no primeiro acesso, inclusive para bancos existentes. Se a conta MariaDB do aplicativo tiver acesso apenas a dados, importe `database/agenda-recorrente.sql` e `database/atividades-concluidas.sql` como administrador antes de abrir a agenda.
 
-### Plano com IA
+### Planejamento do dia
 
-Em **Meu dia → Plano com IA**, use **Gerar plano com IA** para ver uma sequência de tarefas, pausas e lazer na data selecionada. Os blocos confirmados aparecem com a marca **Na agenda**. Clique em **Agendar tarefa**, **Agendar descanso** ou **Agendar lazer** para reservar um horário sugerido. Depois de salvar, gere o plano novamente para atualizar a sequência.
+Em **Meu dia → Planejamento do dia**, use **Gerar plano** para ver uma sequência de tarefas, pausas e lazer na data selecionada. Os blocos confirmados aparecem com a marca **Na agenda**. Clique em **Agendar tarefa**, **Agendar descanso** ou **Agendar lazer** para reservar um horário sugerido. Depois de salvar, gere o plano novamente para atualizar a sequência.
 
-**IA local gratuita.** O modo padrão roda no PHP. Uma busca compara ordens de encaixe de até seis tarefas aptas para a data e prioriza as entregas conforme prazo e prioridade. Com os horários de tarefa definidos, sugere pausas de até 15 minutos entre eles, conforme a disponibilidade. Se houver um interesse que caiba, ele aparece como opção de lazer. Os focos **Descanso** e **Lazer** preservam os compromissos e deixam as novas tarefas para outro plano. Para escolher este modo quando já houver uma chave externa, defina `'provider' => 'local'` em `ai.local.php`.
+**Modo local.** O modo padrão roda no PHP. Uma busca compara ordens de encaixe de até seis tarefas aptas para a data e prioriza as entregas conforme prazo e prioridade. Com os horários de tarefa definidos, sugere pausas de até 15 minutos entre eles, conforme a disponibilidade. Se houver um interesse que caiba, ele aparece como opção de lazer. Os focos **Descanso** e **Lazer** preservam os compromissos e deixam as novas tarefas para outro plano. Para escolher este modo quando já houver uma chave externa, defina `'provider' => 'local'` em `ai.local.php`.
 
 **OpenRouter.** A opção por API continua disponível com `'provider' => 'openrouter'`.
 

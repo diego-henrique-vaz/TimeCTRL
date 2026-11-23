@@ -170,7 +170,7 @@ async function main() {
 
     await page.goto(normal);
     assert.match(await page.locator('[data-free-minutes]').innerText(), /40 min/);
-    await page.getByRole('button', {name:'Gerar plano com IA'}).click();
+    await page.getByRole('button', {name:'Gerar plano', exact:true}).click();
     const aiPlan = page.locator('[data-ai-review]');
     assert.match(await aiPlan.innerText(), /Questionário de redes revisado/);
     assert.match(await aiPlan.innerText(), /18:00–18:30[\s\S]+18:30–18:40 · Pausa[\s\S]+20:00–21:30/);
@@ -180,7 +180,7 @@ async function main() {
     const aiReport = aiPlan.locator('[data-ai-item=task]').filter({hasText:'Relatório de laboratório'});
     await aiReport.getByRole('button', {name:'Agendar tarefa'}).click();
     await page.getByRole('status').getByText('Sugestão adicionada à agenda.').waitFor();
-    await page.getByRole('button', {name:'Gerar plano com IA'}).click();
+    await page.getByRole('button', {name:'Gerar plano', exact:true}).click();
     await aiReport.getByText('Na agenda').waitFor();
 
     const csrf = await page.locator('input[name=csrf]').first().inputValue();

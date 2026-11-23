@@ -85,7 +85,8 @@ async function main() {
     assert.doesNotMatch(await a(view('agenda')), /Intervalo invertido/);
     const home=await a(view('today'));
     assert.match(home,/data-free-minutes>40/);
-    assert.match(home,/IA local gratuita/);
+    assert.match(home,/<h2>Planejamento do dia<\/h2>/);
+    assert.match(home,/<button>Gerar plano<\/button>/);
     assert.match(await a(view('today'),'review-ai',{},403,false),/formulário expirou/);
     const localPlan=await a(view('today'),'review-ai',{},303);
     assert.match(localPlan,/data-ai-review/);

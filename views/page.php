@@ -290,7 +290,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
         </section>
 
         <section class="panel" id="plano-ia">
-            <h2>Plano com IA</h2>
+            <h2>Planejamento do dia</h2>
             <?php if (!$aiConfig): ?>
                 <p>Confira a configuração de IA no README do projeto.</p>
             <?php else: ?>
@@ -298,11 +298,11 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                     <?php fields('review-ai'); ?>
                     <p>Organiza os horários de tarefas, pausas e lazer para <?= h(agendaDate($day)) ?>.</p>
                     <?php if ($aiConfig['provider'] === 'local'): ?>
-                        <p class="muted">IA local gratuita. Compara encaixes por prazo e prioridade, conforme o foco do dia.</p>
+                        <p class="muted">Compara encaixes por prazo e prioridade, conforme o foco do dia.</p>
                     <?php else: ?>
                         <p class="muted">Para ordenar as tarefas, o OpenRouter recebe prazos, durações, prioridades, foco do dia e duração das janelas livres.</p>
                     <?php endif; ?>
-                    <button>Gerar plano com IA</button>
+                    <button>Gerar plano</button>
                 </form>
                 <?php if ($aiReview): ?>
                     <div class="recommendation" data-ai-review>
