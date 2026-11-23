@@ -8,16 +8,19 @@ const { setTimeout: delay } = require('node:timers/promises');
 const root = path.resolve(__dirname, '..');
 fs.mkdirSync(path.join(root,'var'), {recursive:true});
 const dir = fs.mkdtempSync(path.join(root,'var','http-'));
-const sessions = path.join(dir,'sessions');
-fs.mkdirSync(sessions);
+const site = path.join(dir, 'site');
+fs.mkdirSync(site);
+for (const folder of ['app', 'database', 'public', 'views']) {
+  fs.cpSync(path.join(root, folder), path.join(site, folder), {recursive:true});
+}
 const php = process.env.TIMECTRL_PHP ?? 'C:/xampp/php/php.exe';
 const port = Number(process.env.TIMECTRL_HTTP_PORT ?? 8816);
 const base = 'http://127.0.0.1:' + port;
 const tag = () => randomUUID();
 
 async function serve(clock, run) {
-  const server = spawn(php, ['-d','session.save_path=' + sessions,'-S','127.0.0.1:' + port,'-t','public'], {
-    cwd:root, windowsHide:true, stdio:['ignore','ignore','pipe'],
+  const server = spawn(php, ['-d','session.save_path=var/sessions','-S','127.0.0.1:' + port,'-t','public'], {
+    cwd:site, windowsHide:true, stdio:['ignore','ignore','pipe'],
     env:{...process.env,TIMECTRL_DB:path.join(dir,'test.sqlite'),TIMECTRL_NOW:clock},
   });
   let log = '';
@@ -50,6 +53,7 @@ function client() {
     const next=res.headers.get('set-cookie');
     if (next) cookie=next.split(';')[0];
     const html=await res.text();
+    assert.doesNotMatch(html, /session_start\(\)|session_regenerate_id\(\)|<b>Warning<\/b>/);
     const match=/name="csrf" value="([0-9a-f]+)"/.exec(html);
     if (match) token=match[1];
     assert.equal(res.status,expected,route+' '+action+' '+html.replace(/<[^>]+>/g,' ').trim().slice(-600));
@@ -103,6 +107,7 @@ async function main() {
   });
   await serve('2026-11-20 18:00', async () => {
     const first=await a(view('today'));
+    assert.match(first,/Conta principal/);
     assert.match(first,/Consciência Negra/);
     assert.match(first,/option value="balance" selected/);
     assert.match(await a(view('tasks')), /Relatório/);

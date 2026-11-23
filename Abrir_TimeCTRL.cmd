@@ -19,9 +19,15 @@ if not errorlevel 1 (
   exit /b 0
 )
 
-if not exist "var\sessions" mkdir "var\sessions"
+set "TIMECTRL_SESSION_DIR=%CD%\var\sessions"
+if not exist "%TIMECTRL_SESSION_DIR%" mkdir "%TIMECTRL_SESSION_DIR%"
+if not exist "%TIMECTRL_SESSION_DIR%" (
+  echo Nao foi possivel criar a pasta de sessoes. Confira a permissao da pasta TimeCTRL.
+  pause
+  exit /b 1
+)
 echo Iniciando TimeCTRL em http://127.0.0.1:%TIMECTRL_PORT%/
 echo Mantenha esta janela aberta durante o uso. Pressione Ctrl+C para parar.
 if not defined TIMECTRL_NO_BROWSER start "" /B powershell.exe -NoProfile -Command "$url = 'http://127.0.0.1:' + $env:TIMECTRL_PORT + '/'; for ($i = 0; $i -lt 25; $i++) { $page = curl.exe --noproxy '*' --silent --fail --max-time 1 $url; if ($page -match 'TimeCTRL</title>') { Start-Process $url; exit }; Start-Sleep -Milliseconds 300 }"
-"%TIMECTRL_PHP_EXE%" -d "session.save_path=var/sessions" -S "127.0.0.1:%TIMECTRL_PORT%" -t public
+"%TIMECTRL_PHP_EXE%" -d "session.save_path=%TIMECTRL_SESSION_DIR%" -S "127.0.0.1:%TIMECTRL_PORT%" -t public
 if errorlevel 1 pause

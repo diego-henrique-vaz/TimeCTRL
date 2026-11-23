@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
 date_default_timezone_set('America/Sao_Paulo');
 require __DIR__ . '/../app/store.php';
 require __DIR__ . '/../app/calendar.php';
@@ -12,8 +14,19 @@ header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header("Content-Security-Policy: default-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 session_name('TimeCTRL');
-session_start(['use_strict_mode' => true, 'use_only_cookies' => true, 'cookie_httponly' => true,
-    'cookie_samesite' => 'Lax', 'cookie_secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off']);
+// O iniciador anterior passava um caminho relativo ao diretório do projeto.
+if (session_module_name() === 'files' && str_replace('\\', '/', session_save_path()) === 'var/sessions') {
+    $sessionDirectory = dirname(__DIR__) . '/var/sessions';
+    if (!is_dir($sessionDirectory)) {
+        mkdir($sessionDirectory, 0700, true);
+    }
+    session_save_path($sessionDirectory);
+}
+if (!session_start(['use_strict_mode' => true, 'use_only_cookies' => true, 'cookie_httponly' => true,
+    'cookie_samesite' => 'Lax', 'cookie_secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'])) {
+    http_response_code(503);
+    exit('Não foi possível iniciar a sessão do TimeCTRL. Confira a pasta de sessões e tente novamente.');
+}
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 
 $clock = at(getenv('TIMECTRL_NOW') ?: 'now');
