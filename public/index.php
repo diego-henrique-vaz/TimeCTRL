@@ -45,9 +45,9 @@ function url(string $view = 'today', array $args = []): string
     return '/?' . http_build_query(['view' => $view] + $args);
 }
 
-function redirect(string $view = 'today', array $args = []): never
+function redirect(string $view = 'today', array $args = [], string $anchor = ''): never
 {
-    header('Location: ' . url($view, $args), true, 303);
+    header('Location: ' . url($view, $args) . $anchor, true, 303);
     exit;
 }
 
@@ -86,20 +86,17 @@ try {
                 throw new DomainException('Aguarde 20 segundos entre solicitações de IA.');
             }
             $aiData = userData($db, (int) $account['id'], $day);
-            [$context, $taskIds] = aiContext($aiData, plan($aiData, $focus), $focus, $clock);
-            if (!$taskIds) {
-                throw new DomainException('Cadastre pelo menos uma tarefa pendente para gerar o plano.');
-            }
             if ($aiConfig['provider'] === 'openrouter') {
                 $_SESSION['ai_requested_at'] = time();
             }
             $_SESSION['ai_review'] = ['day' => $day, 'revision' => (int) $account['revision'],
-                'provider' => $aiConfig['provider'], 'result' => generateAiReview($aiConfig, $context, $taskIds)];
-            header('Location: ' . url('today', $day === $today ? [] : ['date' => $day]) . '#plano-ia', true, 303);
-            exit;
+                'provider' => $aiConfig['provider'], 'version' => AI_PLAN_VERSION,
+                'result' => generateAiReview($aiConfig, $aiData, plan($aiData, $focus), $focus, $clock)];
+            redirect('today', $day === $today ? [] : ['date' => $day], '#plano-ia');
         }
         $_SESSION['notice'] = runAction($db, (int) $account['id'], $action, $day, $clock);
-        redirect($view, $day === $today ? [] : ['date' => $day]);
+        $anchor = $action === 'suggestion' && field('exact_slot') === '1' ? '#plano-ia' : '';
+        redirect($view, $day === $today ? [] : ['date' => $day], $anchor);
     }
 } catch (DomainException $failure) {
     if (http_response_code() < 400) {
@@ -126,7 +123,7 @@ $aiReview = null;
 if ($account && $aiConfig && $view === 'today') {
     $savedReview = $_SESSION['ai_review'] ?? [];
     if (($savedReview['day'] ?? null) === $day && ($savedReview['revision'] ?? null) === (int) $account['revision']
-        && ($savedReview['provider'] ?? null) === $aiConfig['provider']) {
+        && ($savedReview['provider'] ?? null) === $aiConfig['provider'] && ($savedReview['version'] ?? null) === AI_PLAN_VERSION) {
         $aiReview = $savedReview['result'];
     }
 }

@@ -55,18 +55,21 @@ function weeklyFields(array $rule): void
     <?php
 }
 
-function proposalForm(array $item, string $view, array $dayArg): void
+function proposalForm(array $item, string $view, array $dayArg, ?string $label = null): void
 {
     ?>
-    <form class="actions" method="post" action="<?= h(url($view, $dayArg)) ?>">
+    <form class="actions" method="post" action="<?= h(url($view, $dayArg)) ?><?= $label === null ? '' : '#plano-ia' ?>">
         <?php fields('suggestion'); ?>
         <input type="hidden" name="kind" value="<?= h($item['kind']) ?>">
         <input type="hidden" name="item" value="<?= h($item['id']) ?>">
         <input type="hidden" name="start_at" value="<?= h($item['start']) ?>">
         <?php if ($item['kind'] === 'rest'): ?><input type="hidden" name="rest_minutes" value="<?= h($item['minutes']) ?>"><?php endif; ?>
-        <button name="decision" value="accept">Aceitar horário</button>
-        <button class="subtle" name="decision" value="later">Adiar</button>
-        <button class="quiet" name="decision" value="dismiss">Dispensar</button>
+        <?php if ($label !== null): ?><input type="hidden" name="exact_slot" value="1"><?php endif; ?>
+        <button name="decision" value="accept"><?= h($label ?? 'Aceitar horário') ?></button>
+        <?php if ($label === null): ?>
+            <button class="subtle" name="decision" value="later">Adiar</button>
+            <button class="quiet" name="decision" value="dismiss">Dispensar</button>
+        <?php endif; ?>
     </form>
     <?php
 }
@@ -290,37 +293,51 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
             <h2>Plano com IA</h2>
             <?php if (!$aiConfig): ?>
                 <p>Confira a configuração de IA no README do projeto.</p>
-            <?php elseif (!array_filter($data['tasks'], static fn(array $task): bool => !$task['done'])): ?>
-                <p>Cadastre uma tarefa pendente para gerar o plano.</p>
             <?php else: ?>
                 <form class="stack" method="post" action="<?= h(url('today', $dayArg)) ?>#plano-ia">
                     <?php fields('review-ai'); ?>
-                    <p>Sugere o que priorizar e um primeiro passo para cada tarefa escolhida. Os horários vêm da agenda.</p>
-                    <?php if (($aiConfig['provider'] ?? '') === 'local'): ?>
-                        <p class="muted">IA local gratuita. O classificador identifica o tipo de tarefa a partir do título e usa o planejamento do dia.</p>
+                    <p>Organiza os horários de tarefas, pausas e lazer para <?= h(agendaDate($day)) ?>.</p>
+                    <?php if ($aiConfig['provider'] === 'local'): ?>
+                        <p class="muted">IA local gratuita. Compara encaixes por prazo e prioridade, conforme o foco do dia.</p>
                     <?php else: ?>
-                        <p class="muted">Ao gerar, o OpenRouter recebe títulos, prazos, duração e prioridade de até seis tarefas, o foco do dia e a duração das janelas livres.</p>
+                        <p class="muted">Para ordenar as tarefas, o OpenRouter recebe prazos, durações, prioridades, foco do dia e duração das janelas livres.</p>
                     <?php endif; ?>
                     <button>Gerar plano com IA</button>
                 </form>
                 <?php if ($aiReview): ?>
-                    <?php $byId = array_column($data['tasks'], null, 'id');
-                    $localSlots = array_column($summary['forecasts'], null, 'id'); ?>
                     <div class="recommendation" data-ai-review>
-                        <p><?= h($aiReview['summary']) ?></p>
-                        <ol class="ai-steps">
-                            <?php foreach ($aiReview['items'] as $item): ?>
-                                <?php $task = $byId[$item['id']] ?? null; if (!$task || $task['done']) continue; ?>
-                                <li><strong><?= h($task['title']) ?></strong>
-                                    <?php if (isset($item['category'])): ?><span class="tag"><?= h($item['category']) ?></span><?php endif; ?>
-                                    <p><?= h($item['reason']) ?></p>
-                                    <p><strong>Primeiro passo</strong> · <?= h($item['step']) ?></p>
-                                    <?php if (isset($localSlots[$item['id']])): ?>
-                                        <p class="muted">Encaixe da agenda · <?= h(stamp($localSlots[$item['id']]['start'])) ?></p>
-                                    <?php endif; ?>
-                                </li>
-                            <?php endforeach; ?>
-                        </ol>
+                        <?php if ($aiReview['items']): ?>
+                            <h3>Sequência sugerida</h3>
+                            <ol class="ai-steps">
+                                <?php foreach ($aiReview['items'] as $item): ?>
+                                    <li data-ai-item="<?= h($item['kind']) ?>">
+                                        <strong><?= h(at($item['start'])->format('H:i')) ?>–<?= h(at($item['end'])->format('H:i')) ?> · <?= h($item['title']) ?></strong>
+                                        <span class="tag"><?= h($item['minutes']) ?> min</span>
+                                        <?php if ($item['scheduled']): ?>
+                                            <span class="tag">Na agenda</span>
+                                        <?php elseif ($item['start'] < timeKey($clock)): ?>
+                                            <p class="muted">Horário iniciado. Gere o plano novamente para atualizar.</p>
+                                        <?php elseif ($item['kind'] === 'rest'): ?>
+                                            <?php if ($alternative = $item['alternative']): ?>
+                                                <p>Você também pode escolher <?= h($alternative['title']) ?>
+                                                    (<?= h(duration($alternative['start'], $alternative['end'])) ?> min).</p>
+                                            <?php endif; ?>
+                                            <?php proposalForm($item, $view, $dayArg, 'Agendar descanso'); ?>
+                                            <?php if ($alternative): proposalForm($alternative, $view, $dayArg, 'Agendar lazer'); endif; ?>
+                                        <?php else: ?>
+                                            <?php proposalForm($item, $view, $dayArg, 'Agendar tarefa'); ?>
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ol>
+                        <?php elseif (!$dayRanges): ?>
+                            <p>Cadastre um horário livre na <a href="<?= h(url('agenda', $dayArg)) ?>">agenda</a> para receber sugestões nesta data.</p>
+                        <?php else: ?>
+                            <p>Sem sugestões que caibam no tempo livre e no foco deste dia.</p>
+                        <?php endif; ?>
+                        <?php if ($aiReview['unplaced'] > 0): ?>
+                            <p class="muted">Tarefas pendentes fora desta sequência · <?= h($aiReview['unplaced']) ?>.</p>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             <?php endif; ?>

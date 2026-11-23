@@ -394,7 +394,11 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 }
                 $decision = option('decision', ['accept' => true, 'later' => true, 'dismiss' => true]);
                 if ($decision === 'accept') {
-                    $start = max($now, timestamp('start_at'));
+                    $start = timestamp('start_at');
+                    if (field('exact_slot') === '1' && $start < $now) {
+                        throw new DomainException('Esse horário já começou. Gere o plano novamente para atualizar os horários.');
+                    }
+                    $start = max($now, $start);
                     saveBlock($db, $uid, userData($db, $uid, substr($start, 0, 10)), $start, $kind, $item, $now);
                     $message = 'Sugestão adicionada à agenda.';
                 } else {

@@ -43,9 +43,9 @@ As tabelas adicionais são criadas automaticamente no primeiro acesso, inclusive
 
 ### Plano com IA
 
-Em **Meu dia → Plano com IA**, clique em **Gerar plano com IA** para receber uma ordem sugerida e um primeiro passo para até três tarefas pendentes. O TimeCTRL calcula os horários e mantém as reservas sob controle da pessoa. O plano é temporário na sessão e precisa ser gerado novamente após mudanças na conta.
+Em **Meu dia → Plano com IA**, use **Gerar plano com IA** para ver uma sequência de tarefas, pausas e lazer na data selecionada. Os blocos confirmados aparecem com a marca **Na agenda**. Clique em **Agendar tarefa**, **Agendar descanso** ou **Agendar lazer** para reservar um horário sugerido. Depois de salvar, gere o plano novamente para atualizar a sequência.
 
-**IA local gratuita.** O modo padrão roda no PHP sem chave e sem internet. Um classificador multinomial Naive Bayes aprende pela frequência das palavras em 40 títulos rotulados em português. Ele identifica o tipo de tarefa e escolhe um primeiro passo preparado para essa categoria. O TimeCTRL usa prazos, prioridades e encaixes já calculados para ordenar as tarefas. Títulos que o classificador não reconhece recebem um primeiro passo geral. Para selecionar esse modo em uma instalação que já usa uma chave externa, defina `'provider' => 'local'` em `ai.local.php`.
+**IA local gratuita.** O modo padrão roda no PHP. Uma busca compara ordens de encaixe de até seis tarefas aptas para a data e prioriza as entregas conforme prazo e prioridade. Com os horários de tarefa definidos, sugere pausas de até 15 minutos entre eles, conforme a disponibilidade. Se houver um interesse que caiba, ele aparece como opção de lazer. Os focos **Descanso** e **Lazer** preservam os compromissos e deixam as novas tarefas para outro plano. Para escolher este modo quando já houver uma chave externa, defina `'provider' => 'local'` em `ai.local.php`.
 
 **OpenRouter.** A opção por API continua disponível com `'provider' => 'openrouter'`.
 
@@ -53,7 +53,7 @@ Em **Meu dia → Plano com IA**, clique em **Gerar plano com IA** para receber u
 2. Copie `ai.example.php` para `ai.local.php` na raiz do projeto, defina `'provider' => 'openrouter'` e preencha `key` nesse arquivo. Ele fica fora da pasta `public/` e é ignorado pelo Git. Em um servidor, também é possível fornecer `TIMECTRL_AI_PROVIDER=openrouter` e `TIMECTRL_OPENROUTER_KEY` pelo ambiente do processo PHP.
 3. Abra **Meu dia**, cadastre tarefas com dados fictícios e gere o plano. A integração requer internet e a extensão PHP `curl`. Para trocar o modelo, use `model` no arquivo local ou `TIMECTRL_OPENROUTER_MODEL` no ambiente. Escolha um modelo compatível com `json_schema` e disponível em uma rota com retenção zero.
 
-No modo OpenRouter, o aplicativo só consulta a API quando você solicita a geração. Envia o dia, o foco, a duração das janelas livres e dados de até seis tarefas pendentes. Os pedidos solicitam rotas ZDR conforme a política da conta e exigem resposta estruturada. Sem um modelo disponível, a agenda e suas sugestões locais continuam funcionando. Execute `php tests/ai.php` para verificar a classificação local e simular a integração com o OpenRouter.
+No modo OpenRouter, o aplicativo só consulta a API quando você solicita a geração. O modelo recebe o dia, o foco, a duração das janelas livres, os prazos, as prioridades e a duração de até seis tarefas, identificadas por referências temporárias. O TimeCTRL valida a ordenação e calcula os horários localmente. Os pedidos solicitam rotas ZDR conforme a política da conta e exigem resposta estruturada. Sem um modelo disponível, a agenda e suas sugestões locais continuam funcionando. Execute `php tests/ai.php` para verificar a busca local por horários, as pausas e a preservação de blocos confirmados e simular a integração com o OpenRouter.
 
 [Respostas estruturadas do OpenRouter](https://openrouter.ai/docs/guides/features/structured-outputs) · [Retenção zero](https://openrouter.ai/docs/guides/features/zdr)
 

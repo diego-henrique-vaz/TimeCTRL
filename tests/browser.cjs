@@ -173,12 +173,15 @@ async function main() {
     await page.getByRole('button', {name:'Gerar plano com IA'}).click();
     const aiPlan = page.locator('[data-ai-review]');
     assert.match(await aiPlan.innerText(), /Questionário de redes revisado/);
-    assert.match(await aiPlan.innerText(), /Texto e relatório[\s\S]+Primeiro passo/);
+    assert.match(await aiPlan.innerText(), /18:00–18:30[\s\S]+18:30–18:40 · Pausa[\s\S]+20:00–21:30/);
     assert.match(await page.locator('[data-recommendation]').innerText(), /Questionário de redes revisado/);
     const proposed = page.locator('[data-forecast]').filter({hasText:'Relatório de laboratório'});
     assert.match(await proposed.innerText(), /20:00/);
-    await proposed.getByRole('button', {name:'Aceitar horário'}).click();
+    const aiReport = aiPlan.locator('[data-ai-item=task]').filter({hasText:'Relatório de laboratório'});
+    await aiReport.getByRole('button', {name:'Agendar tarefa'}).click();
     await page.getByRole('status').getByText('Sugestão adicionada à agenda.').waitFor();
+    await page.getByRole('button', {name:'Gerar plano com IA'}).click();
+    await aiReport.getByText('Na agenda').waitFor();
 
     const csrf = await page.locator('input[name=csrf]').first().inputValue();
     const conflicting = await page.request.post(at(normal, 'today'), {form:{

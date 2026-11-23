@@ -89,12 +89,16 @@ async function main() {
     assert.match(await a(view('today'),'review-ai',{},403,false),/formulário expirou/);
     const localPlan=await a(view('today'),'review-ai',{},303);
     assert.match(localPlan,/data-ai-review/);
-    assert.match(localPlan,/Primeiro passo/);
+    assert.match(localPlan,/18:00–18:30[^<]*Questionário[\s\S]+18:30–18:40[^<]*Pausa[\s\S]+20:00–21:30[^<]*Relatório/);
+    assert.doesNotMatch(localPlan,/Primeiro passo/);
     assert.match(home,/data-recommendation="task">\s*<h3>Questionário/);
     assert.match(home,/Relatório<\/h3><p>[^<]*20:00/);
     const proposal=/name="item" value="(\d+)">\s*<input type="hidden" name="start_at" value="2026-11-19 20:00"/.exec(home);
     assert(proposal);
-    await a(view('today'),'suggestion',{kind:'task',item:proposal[1],decision:'accept',start_at:'2026-11-19 20:00'},303);
+    await a(view('today'),'suggestion',{kind:'task',item:proposal[1],decision:'accept',start_at:'2026-11-19 17:59',exact_slot:'1'},422);
+    await a(view('today'),'suggestion',{kind:'task',item:proposal[1],decision:'accept',start_at:'2026-11-19 20:00',exact_slot:'1'},303);
+    const confirmed = await a(view('today'),'review-ai',{},303);
+    assert.match(confirmed,/20:00–21:30[^<]*Relatório[\s\S]+Na agenda/);
     await a(view('today'),'suggestion',{kind:'task',item:id,decision:'accept',start_at:'2026-11-19 20:00'},422);
     await a(view('agenda'),'add-window',{kind:'busy',title:'Aula extra',start_at:nov19+'20:00',end_at:nov19+'21:30'},303);
     const conflicted=await a(view('today'));

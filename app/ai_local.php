@@ -1,104 +1,151 @@
 <?php
 declare(strict_types=1);
 
-const LOCAL_AI_EXAMPLES = [
-    'estudo' => [
-        'revisar capítulos para a prova', 'resolver exercícios de cálculo', 'estudar matéria para avaliação',
-        'praticar questões do simulado', 'reler anotações da aula', 'responder questionário de revisão',
-        'estudar conteúdos do exame', 'refazer lista de exercícios',
-    ],
-    'texto' => [
-        'escrever relatório do estágio', 'rascunhar introdução do artigo', 'redigir conclusão da pesquisa',
-        'revisar texto do trabalho', 'organizar referências bibliográficas', 'produzir resumo escrito',
-        'documentar resultados no relatório', 'editar redação e bibliografia',
-    ],
-    'apresentacao' => [
-        'montar slides do seminário', 'preparar apresentação oral', 'ensaiar fala da apresentação',
-        'fazer roteiro dos slides', 'treinar explicação para a banca', 'criar apresentação no powerpoint',
-        'ajustar slides e roteiro do seminário', 'ensaiar discurso e demonstração',
-    ],
-    'tecnica' => [
-        'programar tela do sistema', 'corrigir erro no código', 'criar consulta SQL no banco de dados',
-        'implementar cadastro de usuários', 'rodar testes automatizados', 'configurar projeto no git',
-        'desenvolver função da API', 'investigar bug no formulário',
-    ],
-    'organizacao' => [
-        'separar documentos para matrícula', 'preencher formulário de inscrição', 'organizar arquivos da pasta',
-        'agendar consulta e confirmar horário', 'separar materiais para a reunião', 'enviar comprovante de pagamento',
-        'atualizar planilha de controle', 'conferir documentos e anexos da inscrição',
-    ],
-];
-
-const LOCAL_AI_STEPS = [
-    'estudo' => ['Estudo', 'Escolha um tópico e tente responder uma questão sem consultar o material. Depois confira sua resposta.'],
-    'texto' => ['Texto e relatório', 'Abra o documento e escreva três pontos que precisam aparecer. Comece pelo mais fácil de explicar.'],
-    'apresentacao' => ['Apresentação', 'Escreva a ideia principal da apresentação e separe três tópicos para os slides ou para a fala.'],
-    'tecnica' => ['Implementação técnica', 'Anote o resultado que você espera e teste um caso pequeno antes de mudar o projeto.'],
-    'organizacao' => ['Organização', 'Liste os materiais ou informações necessários e reúna o primeiro item que estiver disponível.'],
-];
-
-function localAiWords(string $text): array
+function aiTaskPlacement(array $task, array $ranges): ?array
 {
-    $text = strtr(mb_strtolower($text, 'UTF-8'), ['á' => 'a', 'à' => 'a', 'â' => 'a', 'ã' => 'a', 'é' => 'e', 'ê' => 'e',
-        'í' => 'i', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ú' => 'u', 'ç' => 'c']);
-    return preg_split('/[^a-z]+/', $text, -1, PREG_SPLIT_NO_EMPTY);
-}
-
-function localAiStatistics(): array
-{
-    static $stats;
-    if ($stats !== null) {
-        return $stats;
-    }
-    $stats = ['words' => [], 'counts' => [], 'totals' => []];
-    $commonWords = ['de', 'do', 'da', 'dos', 'das', 'no', 'na', 'e', 'o', 'a', 'para', 'um', 'uma', 'fazer', 'com'];
-    foreach (LOCAL_AI_EXAMPLES as $category => $titles) {
-        $tokens = array_values(array_diff(localAiWords(implode(' ', $titles)), $commonWords));
-        $stats['counts'][$category] = array_count_values($tokens);
-        $stats['totals'][$category] = count($tokens);
-        $stats['words'] += $stats['counts'][$category];
-    }
-    return $stats;
-}
-
-function classifyLocalAiTask(string $title): ?string
-{
-    $stats = localAiStatistics();
-    $terms = array_intersect_key(array_count_values(localAiWords($title)), $stats['words']);
-    if (!$terms) {
-        return null;
-    }
-    $scores = [];
-    foreach ($stats['counts'] as $category => $counts) {
-        $denominator = $stats['totals'][$category] + count($stats['words']);
-        $scores[$category] = 0.0;
-        foreach ($terms as $token => $count) {
-            $scores[$category] += $count * log((($counts[$token] ?? 0) + 1) / $denominator);
+    foreach ($ranges as [$start, $end]) {
+        $latestEnd = min($end, $task['deadline']);
+        $finish = addMinutes($start, $task['minutes']);
+        if ($finish <= $latestEnd) {
+            return $task + ['start' => $start, 'end' => $finish, 'latest_end' => $latestEnd];
         }
     }
-    arsort($scores, SORT_NUMERIC);
-    $ranked = array_values($scores);
-    return $ranked[0] - $ranked[1] >= 0.2 ? array_key_first($scores) : null;
+    return null;
 }
 
-function generateLocalAiReview(array $context, array $taskIds): array
+function searchAiTaskSlots(array $tasks, array $ranges): array
 {
-    $tasks = $context['tasks'];
-    $priority = array_flip(PRIORITIES);
-    usort($tasks, static fn(array $a, array $b): int =>
-        [!$a['overdue'], $a['deadline'], -$priority[$a['priority']], !$a['proposed_on_selected_date'], $a['minutes'], $a['ref']]
-            <=> [!$b['overdue'], $b['deadline'], -$priority[$b['priority']], !$b['proposed_on_selected_date'], $b['minutes'], $b['ref']]);
-    $items = [];
-    foreach (array_slice($tasks, 0, AI_MAX_RECOMMENDATIONS) as $task) {
-        $category = classifyLocalAiTask($task['title']);
-        [$label, $step] = LOCAL_AI_STEPS[$category] ?? ['Geral', 'Separe uma parte pequena da tarefa e defina o que precisa ficar pronto primeiro.'];
-        $reason = match (true) {
-            $task['overdue'] => 'O prazo já passou. Revise o que falta para concluir.',
-            $task['no_slot_before_deadline'] => 'A agenda sinalizou falta de tempo antes do prazo.',
-            $task['proposed_on_selected_date'] => 'A agenda encontrou um encaixe na data escolhida.',
-            default => 'A ordem considera a proximidade do prazo e a prioridade cadastrada.',
-        };
-        $items[] = ['id' => $taskIds[$task['ref']], 'reason' => $reason, 'step' => $step, 'category' => $label];
+    // O peso de uma entrega supera a soma dos pesos das entregas que vêm depois dela.
+    $weights = [];
+    foreach (array_keys($tasks) as $index => $ref) {
+        $weights[$ref] = 1 << (count($tasks) - $index - 1);
     }
-    return ['summary' => 'Organizamos as tarefas por prazo e prioridade. Veja um primeiro passo para começar.', 'items' => $items];
+    $best = [];
+    $bestScore = 0;
+    $fullScore = array_sum($weights);
+    $search = static function (array $remaining, array $free, array $chosen, int $score) use (&$search, &$best, &$bestScore, $weights, $fullScore): void {
+        if ($score > $bestScore) {
+            $best = $chosen;
+            $bestScore = $score;
+        }
+        foreach ($remaining as $ref => $task) {
+            if ($bestScore === $fullScore) {
+                return;
+            }
+            $slot = aiTaskPlacement($task, $free);
+            if ($slot === null) {
+                continue;
+            }
+            $next = $remaining;
+            unset($next[$ref]);
+            $search($next, subtract($free, $slot['start'], $slot['end']), [...$chosen, $slot], $score + $weights[$ref]);
+        }
+    };
+    $search($tasks, $ranges, [], 0);
+    return $best;
+}
+
+function aiShiftTasksForPause(array $timeline, int $next, string $resume): ?array
+{
+    for ($i = $next; isset($timeline[$i]) && $timeline[$i]['start'] < $resume; $i++) {
+        $item = $timeline[$i];
+        if ($item['scheduled']) {
+            return null;
+        }
+        $finish = addMinutes($resume, $item['minutes']);
+        if ($finish > $item['latest_end']) {
+            return null;
+        }
+        $timeline[$i]['start'] = $resume;
+        $timeline[$i]['end'] = $resume = $finish;
+    }
+    return $timeline;
+}
+
+function aiPauseSlot(array &$timeline, int $index, array $ranges, int $preferred): ?array
+{
+    $next = $timeline[$index + 1] ?? null;
+    $nextStart = $next['start'] ?? null;
+    $previousEnd = $timeline[$index]['end'] ?? '';
+    $best = null;
+    $bestMinutes = MIN_REST_MINUTES - 1;
+    foreach ($ranges as [$from, $until]) {
+        $start = max($from, $previousEnd);
+        if ($start >= $until || ($nextStart !== null && $start > $nextStart)) {
+            continue;
+        }
+        $limit = $nextStart !== null && $next['scheduled'] ? min($until, $nextStart) : $until;
+        for ($minutes = min($preferred, duration($start, $limit)); $minutes > $bestMinutes; $minutes--) {
+            $end = addMinutes($start, $minutes);
+            $adjusted = aiShiftTasksForPause($timeline, $index + 1, $end);
+            if ($adjusted === null) {
+                continue;
+            }
+            $best = [[$start, $end], $adjusted];
+            $bestMinutes = $minutes;
+            break;
+        }
+        if ($bestMinutes === $preferred) {
+            break;
+        }
+    }
+    if ($best === null) {
+        return null;
+    }
+    [$slot, $timeline] = $best;
+    return $slot;
+}
+
+function aiPauseItem(array &$data, DateTimeImmutable $clock, array $slot): array
+{
+    [$start, $end] = $slot;
+    $alternative = null;
+    if (in_array($data['choice']['mode'], ['balance', 'leisure'], true)) {
+        [$alternative] = leisureOptions($data, $clock, $slot);
+        if ($alternative) {
+            $data['blocks'][] = ['kind' => 'interest', 'item_id' => $alternative['id'],
+                'start_at' => $alternative['start'], 'end_at' => $alternative['end']];
+        }
+    }
+    return ['id' => 0, 'kind' => 'rest', 'title' => 'Pausa', 'start' => $start, 'end' => $end,
+        'minutes' => duration($start, $end), 'scheduled' => false, 'alternative' => $alternative];
+}
+
+function aiTimeline(array $data, array $timeline, array $ranges, DateTimeImmutable $clock): array
+{
+    usort($timeline, static fn(array $a, array $b): int => [$a['start'], $a['end']] <=> [$b['start'], $b['end']]);
+    if (!allowedSuggestion($data, 'rest:0', timeKey($clock))) {
+        return $timeline;
+    }
+    $dayMode = $data['choice']['mode'];
+    $preferred = min(15, (int) $data['goals']['rest_minutes']);
+    $result = [];
+    $hasPause = false;
+    foreach (array_keys($timeline) as $index) {
+        $item = $timeline[$index];
+        $result[] = $item;
+        $next = $timeline[$index + 1] ?? null;
+        $hasPause = $hasPause || $item['kind'] !== 'task';
+        if ($item['kind'] === 'task' && ($next['kind'] ?? null) === 'task') {
+            $slot = aiPauseSlot($timeline, $index, $ranges, $preferred);
+            if ($slot !== null) {
+                $result[] = aiPauseItem($data, $clock, $slot);
+                $hasPause = true;
+            }
+        }
+    }
+    if (!$hasPause && $dayMode !== 'task') {
+        $trailingMinutes = $dayMode === 'rest' ? (int) $data['goals']['rest_minutes'] : $preferred;
+        if (in_array($dayMode, ['rest', 'leisure'], true) && $timeline) {
+            $leading = aiPauseSlot($timeline, -1, $ranges, $trailingMinutes);
+            if ($leading !== null) {
+                return [aiPauseItem($data, $clock, $leading), ...$result];
+            }
+        }
+        $slot = aiPauseSlot($timeline, count($timeline) - 1, $ranges, $trailingMinutes);
+        if ($slot !== null) {
+            $result[] = aiPauseItem($data, $clock, $slot);
+        }
+    }
+    return $result;
 }
