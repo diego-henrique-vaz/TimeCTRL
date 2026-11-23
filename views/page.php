@@ -71,6 +71,20 @@ function proposalForm(array $item, string $view, array $dayArg): void
     <?php
 }
 
+function completionForm(string $action, int $id, int $minutes, string $today, string $view, array $dayArg): void
+{
+    ?>
+    <form class="stack completion-form" method="post" action="<?= h(url($view, $dayArg)) ?>">
+        <?php fields($action); ?><input type="hidden" name="id" value="<?= h($id) ?>">
+        <label>Tempo gasto (min)<input type="number" name="minutes" min="1" max="1440" required value="<?= h($minutes) ?>"></label>
+        <details><summary>Registrar em outra data</summary>
+            <label>Data da atividade<input type="date" name="log_day" max="<?= h($today) ?>" value="<?= h($today) ?>"></label>
+        </details>
+        <button class="subtle"><?= $action === 'done-task' ? 'Concluir tarefa' : 'Marcar como feito' ?></button>
+    </form>
+    <?php
+}
+
 $nav = ['today' => 'Meu dia', 'tasks' => 'Tarefas', 'agenda' => 'Agenda', 'interests' => 'Interesses', 'habits' => 'Hábitos'];
 $headings = $nav + ['login' => 'Acesse sua agenda', 'signup' => 'Crie sua conta'];
 $dayArg = $day === $today ? [] : ['date' => $day];
@@ -292,9 +306,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                             <label>Duração (min)<input type="number" name="minutes" min="1" max="720" required value="<?= h($task['minutes']) ?>"></label>
                             <label>Prioridade<select name="priority"><?php choices(PRIORITIES, $task['priority']); ?></select></label><button>Salvar edição</button>
                         </form>
-                        <form method="post" action="<?= h(url($view, $dayArg)) ?>">
-                            <?php fields('done-task'); ?><input type="hidden" name="id" value="<?= h($task['id']) ?>"><button class="subtle">Concluir tarefa</button>
-                        </form>
+                        <?php completionForm('done-task', (int) $task['id'], (int) $task['minutes'], $today, $view, $dayArg); ?>
                     </div>
                 </details>
             <?php endforeach; ?>
@@ -428,11 +440,9 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                             </form>
                         </div>
                     </details>
-                    <?php if ($block['kind'] === 'task'): ?>
-                        <form method="post" action="<?= h(url($view, $dayArg)) ?>">
-                            <?php fields('done-task'); ?><input type="hidden" name="id" value="<?= h($block['item_id']) ?>"><button class="subtle">Concluir tarefa</button>
-                        </form>
-                    <?php endif; ?>
+                    <?php $isTask = $block['kind'] === 'task';
+                    completionForm($isTask ? 'done-task' : 'done-block', (int) $block[$isTask ? 'item_id' : 'id'],
+                        duration($block['start_at'], $block['end_at']), $today, $view, $dayArg); ?>
                     </div>
                 <?php endforeach; ?>
             </section>
@@ -496,7 +506,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                     <?php fields('save-goals'); ?>
                     <?php foreach ([
                         'reading_sessions' => ['Leituras por semana', 0, 30],
-                        'busy_days' => ['Dias seguidos de trabalho ou estudo para sugerir pausa', 0, 30],
+                        'busy_days' => ['Dias seguidos com trabalho, estudo ou tarefas para sugerir pausa', 0, 30],
                         'rest_minutes' => ['Duração preferida da pausa (min)', MIN_REST_MINUTES, 180],
                         'gaming_minutes' => ['Limite semanal de jogo (min, 0 = sem limite)', 0, 10080],
                     ] as $key => [$label, $min, $max]): ?>
@@ -507,10 +517,11 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
         </div>
         <section class="panel lists">
             <h2>Atividades registradas</h2>
-            <?php if (!$data['activities']): ?><p class="muted">Nenhuma atividade registrada. O painel só usa os dados que você informar.</p><?php endif; ?>
+            <?php if (!$data['activities']): ?><p class="muted">Você pode registrar aqui ou marcar atividades como feitas na agenda.</p><?php endif; ?>
             <?php foreach (array_reverse($data['activities']) as $entry): ?>
-                <article class="entry"><div><h3><?= h(ACTIVITIES[$entry['kind']]) ?></h3>
-                    <p><?= h(at($entry['log_day'])->format('d/m/Y')) ?> · <?= h($entry['minutes']) ?> min</p></div>
+                <article class="entry" data-activity="<?= h($entry['kind']) ?>"><div>
+                    <h3><?= h($entry['title'] ?? ACTIVITIES[$entry['kind']]) ?></h3>
+                    <p><?= $entry['title'] ? h(ACTIVITIES[$entry['kind']]) . ' · ' : '' ?><?= h(at($entry['log_day'])->format('d/m/Y')) ?> · <?= h($entry['minutes']) ?> min</p></div>
                     <form method="post" action="<?= h(url($view, $dayArg)) ?>"><?php fields('remove-activity'); ?>
                         <input type="hidden" name="id" value="<?= h($entry['id']) ?>"><button class="quiet">Remover</button>
                     </form>

@@ -29,7 +29,7 @@ Inicie MySQL no painel do XAMPP. Crie um banco `timectrl`, um usuário com acess
 2. Informe seus horários livres e compromissos na agenda.
 3. Em **Meu dia**, escolha entre tarefas, lazer, descanso ou equilíbrio. O painel mostra o tempo que sobra depois dos blocos confirmados. Em equilíbrio, sugere lazer e, quando há tarefas já marcadas, oferece também uma pausa se houver espaço após os encaixes. Se o lazer coincidir com um encaixe de tarefa ainda não aceito, o painel avisa antes de você decidir. No foco descanso, a pausa usa a duração preferida ou se ajusta a um intervalo menor, a partir de cinco minutos. Os alertas de prazos continuam disponíveis.
 4. Em **Interesses**, salve jogos, filmes, séries, animes e livros. A duração é o tempo estimado da próxima sessão. O campo de detalhe pode conter algo como “ler um capítulo”.
-5. Em **Hábitos**, informe as atividades que já fez e configure metas opcionais. O tempo disponível no dia determina o que cabe. Um limite semanal de jogo igual a zero desativa esse limite. A agenda só reserva um horário quando você aceita.
+5. Em **Hábitos**, informe as atividades que já fez e configure metas opcionais. Ao concluir uma tarefa ou marcar uma pausa ou sessão de lazer como feita na agenda, confira a duração e, se necessário, ajuste a data. A atividade vai para o histórico com seu título. Leitura e jogos entram nas metas semanais, e as sugestões evitam repetir a pausa ou o mesmo interesse já registrado naquele dia. O tempo disponível no dia determina o que cabe. Um limite semanal de jogo igual a zero desativa esse limite.
 
 ### Rotina semanal e exceções
 
@@ -37,7 +37,7 @@ Em **Agenda → Rotina semanal**, escolha os dias, os horários e a data inicial
 
 Ao abrir um horário recorrente em **Intervalos cadastrados**, use **Salvar só este dia** para mudar os horários ou **Cancelar só este dia** para pular o compromisso nessa data. Marque **Marcar o tempo liberado como livre** se quiser usar o período retirado para encaixar tarefas ou lazer. Outros compromissos continuam descontando tempo. **Restaurar horário habitual** desfaz o ajuste. Um bloco de tarefa pode ser concluído diretamente pela agenda e devolve o horário reservado ao tempo disponível.
 
-As tabelas de rotina são criadas automaticamente no primeiro acesso, inclusive para bancos existentes. Se a conta MariaDB do aplicativo tiver acesso apenas a dados, importe `database/agenda-recorrente.sql` como administrador antes de abrir a agenda.
+As tabelas adicionais são criadas automaticamente no primeiro acesso, inclusive para bancos existentes. Se a conta MariaDB do aplicativo tiver acesso apenas a dados, importe `database/agenda-recorrente.sql` e `database/atividades-concluidas.sql` como administrador antes de abrir a agenda.
 
 As recomendações são calculadas em PHP. O banco guarda contas, dados acadêmicos e preferências. Os avisos aparecem no painel ao consultar ou atualizar o dia. O calendário local cobre os feriados nacionais brasileiros de 2026 classificados no art. 1º da Portaria MGI nº 11.460/2025. Pontos facultativos e feriados locais ficam fora dessa cobertura. A data do feriado não muda a agenda automaticamente.
 

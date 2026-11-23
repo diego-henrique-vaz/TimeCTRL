@@ -32,12 +32,15 @@ function database(): PDO
     $tables = $sqlite ? 'sqlite_master' : 'information_schema.tables';
     $filter = $sqlite ? 'name' : 'table_name';
     $schemaFilter = $sqlite ? '' : ' AND table_schema = DATABASE()';
-    $count = one($db, "SELECT COUNT(*) AS total FROM $tables WHERE $filter IN ('recurring_windows', 'window_exceptions')$schemaFilter");
-    if ((int) $count['total'] !== 2) {
-        $migration = file_get_contents($root . '/database/agenda-recorrente.sql');
-        foreach (explode(';', $sqlite ? str_replace(' AUTO_INCREMENT', '', $migration) : $migration) as $statement) {
-            if (trim($statement) !== '') {
-                $db->exec($statement);
+    $installed = execute($db, "SELECT $filter FROM $tables WHERE $filter IN ('recurring_windows', 'window_exceptions', 'activity_details')$schemaFilter")
+        ->fetchAll(PDO::FETCH_COLUMN);
+    foreach (['agenda-recorrente.sql' => ['recurring_windows', 'window_exceptions'], 'atividades-concluidas.sql' => ['activity_details']] as $migration => $required) {
+        if (array_diff($required, $installed)) {
+            $sql = file_get_contents($root . '/database/' . $migration);
+            foreach (explode(';', $sqlite ? str_replace(' AUTO_INCREMENT', '', $sql) : $sql) as $statement) {
+                if (trim($statement) !== '') {
+                    $db->exec($statement);
+                }
             }
         }
     }
@@ -81,9 +84,11 @@ function transaction(PDO $db, int $uid, callable $process): void
 function userData(PDO $db, int $uid, string $day): array
 {
     $data = [];
-    foreach (['tasks', 'windows', 'interests', 'blocks', 'activities'] as $table) {
+    foreach (['tasks', 'windows', 'interests', 'blocks'] as $table) {
         $data[$table] = execute($db, "SELECT * FROM $table WHERE user_id = ? ORDER BY id", [$uid])->fetchAll();
     }
+    $data['activities'] = execute($db, 'SELECT a.*, d.title, d.interest_id FROM activities a
+        LEFT JOIN activity_details d ON d.activity_id = a.id WHERE a.user_id = ? ORDER BY a.log_day, a.id', [$uid])->fetchAll();
     $data['rules'] = execute($db, 'SELECT * FROM recurring_windows WHERE user_id = ? ORDER BY id', [$uid])->fetchAll();
     if ($data['rules']) {
         $exceptions = execute($db, 'SELECT * FROM window_exceptions WHERE user_id = ? AND occurrence_day >= ?',

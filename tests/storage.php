@@ -63,6 +63,10 @@ verify(count($result['conflicts']) === 1 && count($result['withoutTime']) === 1,
 change($db, $uid, 'done-task', ['id'=>$id]);
 $now = userData($db,$uid,'2026-11-19');
 verify((bool) $now['tasks'][0]['done'] && $now['blocks'] === [], 'concluir marca tarefa e libera o horário');
+change($db, $uid, 'done-task', ['id'=>$id]);
+$history = userData($db, $uid, '2026-11-19')['activities'];
+verify(count($history) === 1 && $history[0]['kind'] === 'task' && $history[0]['title'] === 'Relatório'
+    && (int) $history[0]['minutes'] === 90, 'concluir novamente mantém um único registro com o título e a duração da tarefa');
 
 change($db, $uid, 'save-choice', ['mode'=>'leisure','routine'=>'usual']);
 change($db, $uid, 'hide-choice');
@@ -72,6 +76,28 @@ foreach (INTERESTS as $category => $title) {
     change($db, $uid, 'save-interest', ['title'=>$title, 'category'=>$category,'minutes'=>'20','progress'=>'want','session_note'=>'']);
 }
 verify(count(userData($db,$uid,'2026-11-19')['interests']) === 5, 'as cinco categorias são persistidas');
+
+$play = one($db, "SELECT id FROM interests WHERE user_id = ? AND category = 'game'", [$uid]);
+change($db, $uid, 'add-window', ['kind'=>'free','title'=>'Tempo pessoal','start_at'=>'2026-11-19T18:00','end_at'=>'2026-11-19T19:30']);
+change($db, $uid, 'suggestion', ['kind'=>'interest','item'=>(string) $play['id'],'start_at'=>'2026-11-19T18:00','decision'=>'accept']);
+$session = one($db, 'SELECT id FROM blocks WHERE user_id = ?', [$uid]);
+$complete = ['id'=>(string) $session['id'], 'minutes'=>'35','log_day'=>'2026-11-19'];
+verify(rejects(fn() => change($db, $other, 'done-block', $complete), 'não está disponível'), 'concluir sessão respeita a conta');
+verify(rejects(fn() => change($db, $uid, 'done-block', array_replace($complete, ['log_day'=>'2026-11-20'])), 'data válida'), 'atividade feita não pode ser registrada no futuro');
+change($db, $uid, 'done-block', $complete);
+verify(rejects(fn() => change($db, $uid, 'done-block', $complete), 'não está disponível'), 'repetir a conclusão da mesma sessão não cria registro duplicado');
+$current = userData($db, $uid, '2026-11-19');
+$game = $current['activities'][1];
+verify($game['kind'] === 'game' && $game['title'] === 'Jogo' && (int) $game['minutes'] === 35 && $game['log_day'] === $complete['log_day']
+    && $current['blocks'] === [], 'sessão feita usa a categoria, a data e o tempo informado');
+$current['interests'] = array_values(array_filter($current['interests'], fn($interest) => $interest['category'] === 'game'));
+verify(leisureOptions($current, at('2026-11-19 18:00'), ['2026-11-19 18:00','2026-11-19 19:30'])[0] === null,
+    'sessão de jogo finalizada não é sugerida novamente no mesmo dia');
+$current['goals']['gaming_minutes'] = 45;
+verify(leisureOptions($current, at('2026-11-20 18:00'), ['2026-11-20 18:00','2026-11-20 19:30'])[0] === null,
+    'tempo informado entra no limite semanal de jogo');
+change($db, $uid, 'remove-activity', ['id'=>(string) $game['id']]);
+verify(!one($db, 'SELECT activity_id FROM activity_details WHERE activity_id = ?', [$game['id']]), 'remover registro também remove seu detalhe');
 
 $weekly = ['title'=>'Trabalho habitual','kind'=>'work','weekdays'=>['1','2','3','4','5'],
     'first_day'=>'2026-11-19','start_time'=>'07:30','end_time'=>'14:30'];

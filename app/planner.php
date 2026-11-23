@@ -4,7 +4,8 @@ declare(strict_types=1);
 const INTERESTS = ['book' => 'Livro', 'game' => 'Jogo', 'movie' => 'Filme', 'series' => 'Série', 'anime' => 'Anime'];
 const PROGRESS = ['want' => 'Quero começar', 'ongoing' => 'Em andamento', 'done' => 'Concluído'];
 const MODES = ['task' => 'Tarefas', 'leisure' => 'Lazer', 'rest' => 'Descanso', 'balance' => 'Equilíbrio'];
-const ACTIVITIES = ['work' => 'Trabalho', 'study' => 'Estudo', 'book' => 'Leitura', 'game' => 'Jogo', 'rest' => 'Descanso', 'other' => 'Outro lazer'];
+const ACTIVITIES = ['work' => 'Trabalho', 'study' => 'Estudo', 'task' => 'Tarefa concluída', 'book' => 'Leitura', 'game' => 'Jogo',
+    'movie' => 'Filme', 'series' => 'Série', 'anime' => 'Anime', 'rest' => 'Descanso', 'other' => 'Outro lazer'];
 const PRIORITIES = [3 => 'Alta', 2 => 'Normal', 1 => 'Baixa'];
 const ROUTINES = ['usual' => 'Manter a agenda cadastrada', 'works' => 'Vou trabalhar no feriado', 'changed' => 'Minha rotina mudou'];
 const WINDOW_TYPES = ['free' => 'Livre', 'busy' => 'Compromisso', 'work' => 'Trabalho'];
@@ -278,7 +279,8 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
     $day = $date->format('Y-m-d');
     $now = timeKey($clock);
     $reading = $gaming = 0;
-    $busyDays = [];
+    $busyDays = $completedInterests = [];
+    $restedToday = false;
     foreach ($data['activities'] as $entry) {
         if ($entry['log_day'] > $day) {
             continue;
@@ -287,8 +289,14 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
             $reading += (int) ($entry['kind'] === 'book');
             $gaming += $entry['kind'] === 'game' ? (int) $entry['minutes'] : 0;
         }
-        if (in_array($entry['kind'], ['work', 'study'], true)) {
+        if (in_array($entry['kind'], ['work', 'study', 'task'], true)) {
             $busyDays[$entry['log_day']] = true;
+        }
+        if ($entry['log_day'] === $day) {
+            $restedToday = $restedToday || $entry['kind'] === 'rest';
+            if (!empty($entry['interest_id'])) {
+                $completedInterests[$entry['interest_id']] = true;
+            }
         }
     }
     $reserved = [];
@@ -309,7 +317,7 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
     foreach ($items as $item) {
         $key = 'interest:' . $item['id'];
         $finish = addMinutes($start, (int) $item['minutes']);
-        if ($item['progress'] === 'done' || $finish > $end || isset($reserved[$key]) || !allowedSuggestion($data, $key, $now)
+        if ($item['progress'] === 'done' || $finish > $end || isset($reserved[$key]) || isset($completedInterests[$item['id']]) || !allowedSuggestion($data, $key, $now)
             || ($item['category'] === 'game' && $cap && $gaming + (int) $item['minutes'] > $cap)) {
             continue;
         }
@@ -326,7 +334,7 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
     }
     $restMinutes = min((int) $goals['rest_minutes'], duration($start, $end));
     $rest = null;
-    if ($restMinutes >= MIN_REST_MINUTES && !isset($reserved['rest:0']) && allowedSuggestion($data, 'rest:0', $now)) {
+    if (!$restedToday && $restMinutes >= MIN_REST_MINUTES && !isset($reserved['rest:0']) && allowedSuggestion($data, 'rest:0', $now)) {
         $streak = 0;
         $activityDate = isset($busyDays[$day]) ? $date : $date->modify('-1 day');
         while (isset($busyDays[$activityDate->format('Y-m-d')])) {
@@ -339,7 +347,7 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
                 ? "Uma pausa de $restMinutes min cabe neste intervalo livre." : "Há tempo para uma pausa de $restMinutes min.",
             'goalReached' => $goals['busy_days'] > 0 && $streak >= $goals['busy_days']];
         if ($rest['goalReached']) {
-            $rest['reason'] = "Você registrou $streak dias seguidos com trabalho ou estudo. Uma pausa de $restMinutes min cabe neste intervalo livre.";
+            $rest['reason'] = "Você registrou $streak dias seguidos com trabalho, estudo ou tarefas. Uma pausa de $restMinutes min cabe neste intervalo livre.";
         }
     }
     return [$leisure, $rest];

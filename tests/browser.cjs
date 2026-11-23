@@ -163,7 +163,7 @@ async function main() {
     await page.screenshot({path:path.join(screenshots, '01-tarefas.png'), fullPage:true});
     const questionnaire = page.locator('[data-task]').filter({hasText:'Questionário'});
     const taskId = await questionnaire.getAttribute('data-task');
-    await questionnaire.locator('summary').click();
+    await questionnaire.locator(':scope > summary').click();
     await questionnaire.locator('[name=title]').fill('Questionário de redes revisado');
     await questionnaire.getByRole('button', {name:'Salvar edição'}).click();
     await page.getByRole('status').getByText('Alteração salva.').waitFor();
@@ -214,7 +214,7 @@ async function main() {
 
     await page.goto(at(normal,'tasks'));
     const task = page.locator('[data-task="'+taskId+'"]');
-    await task.locator('summary').click();
+    await task.locator(':scope > summary').click();
     await task.getByRole('button', {name:'Concluir tarefa'}).click();
     await page.getByRole('status').getByText('Tarefa concluída.').waitFor();
     assert.equal(await page.locator('[data-task="'+taskId+'"]').count(), 0);
@@ -426,8 +426,16 @@ async function main() {
     await remaining.getByRole('status').getByText('Sugestão adicionada à agenda.').waitFor();
     await remaining.goto(at(weekly, 'agenda'));
     assert.match(await remaining.locator('[data-block]').filter({hasText:'Pausa'}).innerText(), /16:20–16:30/);
+    const markedPause = remaining.locator('.scheduled-entry').filter({hasText:'Pausa'});
+    await markedPause.getByLabel('Tempo gasto (min)').fill('8');
+    await markedPause.getByRole('button', {name:'Marcar como feito'}).click();
+    await remaining.getByRole('status').getByText('Atividade concluída e registrada nos Hábitos.').waitFor();
+    await remaining.goto(at(weekly, 'habits'));
+    assert.match(await remaining.locator('[data-activity=rest]').innerText(), /Pausa[\s\S]+23\/11\/2026 · 8 min/);
+    await remaining.goto(weekly);
+    assert.equal(await remaining.locator('[data-recommendation=rest]').count(), 0);
     await remainingContext.close();
-    console.log('OK tempo livre: dois blocos de tarefa, lazer e pausa no saldo, e pausa reduzida gravada corretamente');
+    console.log('OK tempo livre: lazer e pausa no saldo, duração ajustada e atividade levada ao histórico');
   } catch (error) {
     if (chrome) console.error(chrome.logText().slice(-1200));
     throw error;

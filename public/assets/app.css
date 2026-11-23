@@ -83,6 +83,8 @@ summary { cursor: pointer; }
 .weekdays input, .check-option input { width: 1rem; min-height: 1rem; flex: 0 0 auto; accent-color: var(--green); }
 .scheduled-entry { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 6px 12px; border-top: 1px solid var(--line); padding: 9px 0; }
 .scheduled-entry .entry { flex: 1 1 195px; min-width: 0; border: 0; padding: 0; }
+.completion-form { min-width: 0; max-width: 195px; }
+.completion-form summary { color: var(--muted); font-size: .85rem; }
 .archive { margin-top: 10px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .auth-shell { display: grid; min-height: 100vh; place-items: center; padding: 21px; }

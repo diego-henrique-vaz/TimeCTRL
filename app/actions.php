@@ -122,6 +122,24 @@ function replaceRow(PDO $db, string $table, array $keys, array $values): void
     execute($db, "INSERT INTO $table ($columns) VALUES ($placeholders)", array_values($all));
 }
 
+function activityDate(DateTimeImmutable $clock, string $fallback = ''): string
+{
+    $day = field('log_day');
+    $day = $day === '' ? $fallback : $day;
+    if (!dateValid($day) || $day > $clock->format('Y-m-d')) {
+        throw new DomainException('Informe uma data válida, igual ou anterior ao dia atual.');
+    }
+    return $day;
+}
+
+function registerCompletion(PDO $db, int $uid, string $kind, string $title, int $plannedMinutes, DateTimeImmutable $clock, ?int $interestId = null): void
+{
+    $date = activityDate($clock, $clock->format('Y-m-d'));
+    $minutes = field('minutes') === '' ? $plannedMinutes : number('minutes', 1, 1440);
+    execute($db, 'INSERT INTO activities (user_id, kind, log_day, minutes) VALUES (?, ?, ?, ?)', [$uid, $kind, $date, $minutes]);
+    execute($db, 'INSERT INTO activity_details (activity_id, title, interest_id) VALUES (?, ?, ?)', [(int) $db->lastInsertId(), $title, $interestId]);
+}
+
 function saveBlock(PDO $db, int $uid, array $data, string $start, string $kind, int $item, string $now, ?int $blockId = null): void
 {
     if ($kind === 'task') {
@@ -193,10 +211,27 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 break;
             case 'done-task':
                 $id = number('id', 1, PHP_INT_MAX);
-                owned($db, 'tasks', $uid, $id);
+                $task = owned($db, 'tasks', $uid, $id);
+                if ($task['done']) {
+                    $message = 'Esta tarefa já foi concluída.';
+                    break;
+                }
+                registerCompletion($db, $uid, 'task', $task['title'], (int) $task['minutes'], $clock);
                 execute($db, 'UPDATE tasks SET done = 1 WHERE user_id = ? AND id = ?', [$uid, $id]);
                 execute($db, "DELETE FROM blocks WHERE user_id = ? AND kind = 'task' AND item_id = ?", [$uid, $id]);
                 $message = 'Tarefa concluída.';
+                break;
+            case 'done-block':
+                $id = number('id', 1, PHP_INT_MAX);
+                $block = owned($db, 'blocks', $uid, $id);
+                if (!in_array($block['kind'], ['interest', 'rest'], true)) {
+                    throw new DomainException('Conclua este tipo de atividade pelo botão da tarefa.');
+                }
+                $interest = $block['kind'] === 'interest' ? owned($db, 'interests', $uid, (int) $block['item_id']) : null;
+                registerCompletion($db, $uid, $interest['category'] ?? 'rest', $block['title'],
+                    duration($block['start_at'], $block['end_at']), $clock, $interest ? (int) $interest['id'] : null);
+                execute($db, 'DELETE FROM blocks WHERE user_id = ? AND id = ?', [$uid, $id]);
+                $message = 'Atividade concluída e registrada nos Hábitos.';
                 break;
             case 'add-window':
             case 'edit-window':
@@ -299,10 +334,7 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 }
                 break;
             case 'add-activity':
-                $date = field('log_day');
-                if (!dateValid($date) || $date > $clock->format('Y-m-d')) {
-                    throw new DomainException('Informe uma data válida, igual ou anterior ao dia atual.');
-                }
+                $date = activityDate($clock);
                 execute($db, 'INSERT INTO activities (user_id, kind, log_day, minutes) VALUES (?, ?, ?, ?)',
                     [$uid, option('kind', ACTIVITIES), $date, number('minutes', 1, 1440)]);
                 break;
