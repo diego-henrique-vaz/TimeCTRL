@@ -72,3 +72,33 @@ foreach (INTERESTS as $category => $title) {
     change($db, $uid, 'save-interest', ['title'=>$title, 'category'=>$category,'minutes'=>'20','progress'=>'want','session_note'=>'']);
 }
 verify(count(userData($db,$uid,'2026-11-19')['interests']) === 5, 'as cinco categorias são persistidas');
+
+$weekly = ['title'=>'Trabalho habitual','kind'=>'work','weekdays'=>['1','2','3','4','5'],
+    'first_day'=>'2026-11-19','start_time'=>'07:30','end_time'=>'14:30'];
+change($db, $uid, 'save-rule', $weekly);
+$ruleId = (string) userData(database(), $uid, '2026-11-19')['rules'][0]['id'];
+$exception = ['rule_id'=>$ruleId,'change_kind'=>'change','start_time'=>'07:30','end_time'=>'12:00'];
+verify(rejects(fn() => change($db, $other, 'save-exception', $exception), 'não está disponível'), 'ajustes de rotina respeitam a conta');
+verify(rejects(fn() => change($db, $uid, 'save-rule', array_replace($weekly, ['weekdays'=>[]])), 'pelo menos um'), 'rotina exige ao menos um dia');
+change($db, $uid, 'save-exception', $exception);
+$today = userData($db, $uid, '2026-11-19');
+verify($today['occurrences'][0]['end_at'] === '2026-11-19 12:00' && !array_filter($today['windows'], fn($w) => !empty($w['released'])),
+    'mudança de horário só libera tempo quando a opção é marcada');
+change($db, $uid, 'save-exception', array_replace($exception, ['change_kind'=>'skip', 'release_time'=>'1']));
+$today = userData($db, $uid, '2026-11-19');
+$next = userData($db, $uid, '2026-11-20');
+verify($today['occurrences'][0]['skipped'] && intervalFits(freeRanges($today), '2026-11-19 07:30', '2026-11-19 14:30')
+    && $next['occurrences'][0]['end_at'] === '2026-11-20 14:30', 'cancelar só uma data pode disponibilizar todo o turno');
+change($db, $uid, 'save-exception', array_replace($exception, ['change_kind'=>'reset']));
+$overnight = ['title'=>'Turno noturno','kind'=>'work','weekdays'=>['4'],'first_day'=>'2026-11-19','start_time'=>'22:00','end_time'=>'06:00'];
+change($db, $uid, 'save-rule', $overnight);
+verify(count(array_filter(userData($db, $uid, '2026-11-20')['windows'], fn($w) => $w['title'] === 'Turno noturno'
+    && $w['start_at'] === '2026-11-19 22:00' && $w['end_at'] === '2026-11-20 06:00')) === 1, 'turno noturno consta na agenda do dia seguinte');
+change($db, $uid, 'save-exception', $exception);
+change($db, $uid, 'delete-rule', ['id'=>$ruleId]);
+verify(!one($db, 'SELECT rule_id FROM window_exceptions WHERE user_id = ? AND rule_id = ?', [$uid, $ruleId]), 'remover rotina elimina seus ajustes');
+$manual = one($db, "SELECT id FROM windows WHERE user_id = ? AND kind = 'free'", [$uid]);
+$edit = array_replace($free, ['id'=>(string) $manual['id'], 'title'=>'Fim da noite', 'end_at'=>'2026-11-19T22:00']);
+change($db, $uid, 'edit-window', $edit);
+verify(owned($db, 'windows', $uid, (int) $manual['id'])['end_at'] === '2026-11-19 22:00' &&
+    rejects(fn() => change($db, $other, 'edit-window', $edit), 'não está disponível'), 'intervalo avulso pode ser editado pela conta proprietária');

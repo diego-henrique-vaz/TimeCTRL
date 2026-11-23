@@ -20,12 +20,25 @@ function database(): PDO
         PDO::ATTR_EMULATE_PREPARES => false,
         PDO::ATTR_STRINGIFY_FETCHES => false,
     ]);
-    if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+    $sqlite = $db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+    if ($sqlite) {
         $db->exec('PRAGMA foreign_keys = ON');
         $db->exec('PRAGMA busy_timeout = 5000');
         if (!one($db, "SELECT name FROM sqlite_master WHERE name = 'feedback'")) {
             $schema = file_get_contents($root . '/database/schema.sql');
             $db->exec(str_replace(' AUTO_INCREMENT', '', $schema));
+        }
+    }
+    $tables = $sqlite ? 'sqlite_master' : 'information_schema.tables';
+    $filter = $sqlite ? 'name' : 'table_name';
+    $schemaFilter = $sqlite ? '' : ' AND table_schema = DATABASE()';
+    $count = one($db, "SELECT COUNT(*) AS total FROM $tables WHERE $filter IN ('recurring_windows', 'window_exceptions')$schemaFilter");
+    if ((int) $count['total'] !== 2) {
+        $migration = file_get_contents($root . '/database/agenda-recorrente.sql');
+        foreach (explode(';', $sqlite ? str_replace(' AUTO_INCREMENT', '', $migration) : $migration) as $statement) {
+            if (trim($statement) !== '') {
+                $db->exec($statement);
+            }
         }
     }
     return $db;
@@ -70,6 +83,13 @@ function userData(PDO $db, int $uid, string $day): array
     $data = [];
     foreach (['tasks', 'windows', 'interests', 'blocks', 'activities'] as $table) {
         $data[$table] = execute($db, "SELECT * FROM $table WHERE user_id = ? ORDER BY id", [$uid])->fetchAll();
+    }
+    $data['rules'] = execute($db, 'SELECT * FROM recurring_windows WHERE user_id = ? ORDER BY id', [$uid])->fetchAll();
+    if ($data['rules']) {
+        $exceptions = execute($db, 'SELECT * FROM window_exceptions WHERE user_id = ? AND occurrence_day >= ?',
+            [$uid, at($day)->modify('-1 day')->format('Y-m-d')])->fetchAll();
+        $data += recurringAgenda($data['rules'], $exceptions, $data['blocks'], $day);
+        $data['windows'] = array_merge($data['windows'], $data['recurring_windows']);
     }
     $data['choice'] = one($db, 'SELECT * FROM day_choices WHERE user_id = ? AND plan_day = ?', [$uid, $day])
         ?? ['mode' => 'balance', 'routine' => 'usual', 'prompt_hidden' => 0];

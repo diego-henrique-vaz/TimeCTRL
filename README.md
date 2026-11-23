@@ -31,6 +31,14 @@ Inicie MySQL no painel do XAMPP. Crie um banco `timectrl`, um usuário com acess
 4. Em **Interesses**, salve jogos, filmes, séries, animes e livros. A duração é o tempo estimado da próxima sessão. O campo de detalhe pode conter algo como “ler um capítulo”.
 5. Em **Hábitos**, informe as atividades que já fez e configure suas metas. As sugestões usam esses registros e as preferências. A agenda só reserva um horário quando você aceita.
 
+### Rotina semanal e exceções
+
+Em **Agenda → Rotina semanal**, escolha os dias, os horários e a data inicial. Cadastre turnos de trabalho, compromissos fixos ou janelas livres. As sugestões usam os próximos 90 dias de rotina a partir da data consultada. Para consultar outra data, use as setas ou o seletor da agenda.
+
+Ao abrir um horário recorrente em **Intervalos cadastrados**, use **Salvar só este dia** para mudar os horários ou **Cancelar só este dia** para pular o compromisso nessa data. Marque **Marcar o tempo liberado como livre** se quiser usar o período retirado para encaixar tarefas ou lazer. Outros compromissos continuam descontando tempo. **Restaurar horário habitual** desfaz o ajuste. Um bloco de tarefa pode ser concluído diretamente pela agenda e devolve o horário reservado ao tempo disponível.
+
+As tabelas de rotina são criadas automaticamente no primeiro acesso, inclusive para bancos existentes. Se a conta MariaDB do aplicativo tiver acesso apenas a dados, importe `database/agenda-recorrente.sql` como administrador antes de abrir a agenda.
+
 As recomendações são calculadas em PHP. O banco guarda contas, dados acadêmicos e preferências. Os avisos aparecem no painel ao consultar ou atualizar o dia. O calendário local cobre os feriados nacionais brasileiros de 2026 classificados no art. 1º da Portaria MGI nº 11.460/2025. Pontos facultativos e feriados locais ficam fora dessa cobertura. A data do feriado não muda a agenda automaticamente.
 
 [Portaria MGI nº 11.460/2025](https://legis.sigepe.gov.br/sigepe-bgp-ws-legis/legis-service/download/?id=0026440285-ALPDF%2F2025)

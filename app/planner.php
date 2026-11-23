@@ -7,6 +7,8 @@ const MODES = ['task' => 'Tarefas', 'leisure' => 'Lazer', 'rest' => 'Descanso', 
 const ACTIVITIES = ['work' => 'Trabalho', 'study' => 'Estudo', 'book' => 'Leitura', 'game' => 'Jogo', 'rest' => 'Descanso', 'other' => 'Outro lazer'];
 const PRIORITIES = [3 => 'Alta', 2 => 'Normal', 1 => 'Baixa'];
 const ROUTINES = ['usual' => 'Manter a agenda cadastrada', 'works' => 'Vou trabalhar no feriado', 'changed' => 'Minha rotina mudou'];
+const WINDOW_TYPES = ['free' => 'Livre', 'busy' => 'Compromisso', 'work' => 'Trabalho'];
+const WEEKDAYS = [1 => 'Seg', 2 => 'Ter', 3 => 'Qua', 4 => 'Qui', 5 => 'Sex', 6 => 'Sáb', 7 => 'Dom'];
 
 function at(string $value): DateTimeImmutable
 {
@@ -49,6 +51,68 @@ function subtract(array $ranges, string $start, string $end): array
         }
     }
     return $remaining;
+}
+
+function repeatsOn(array $rule, DateTimeImmutable $date): bool
+{
+    return $date->format('Y-m-d') >= $rule['first_day'] && ($rule['weekdays'] & (1 << ((int) $date->format('N') - 1))) !== 0;
+}
+
+function shiftInterval(string $day, string $start, string $end): array
+{
+    $endDay = $end < $start ? at($day)->modify('+1 day')->format('Y-m-d') : $day;
+    return ["$day $start", "$endDay $end"];
+}
+
+function recurringAgenda(array $rules, array $exceptions, array $blocks, string $day): array
+{
+    $focus = at($day);
+    $last = $focus->modify('+89 days');
+    $dates = [];
+    for ($date = $focus->modify('-1 day'); $date <= $last; $date = $date->modify('+1 day')) {
+        $dates[$date->format('Y-m-d')] = $date;
+    }
+    foreach ($blocks as $block) {
+        if ($block['end_at'] <= $last->format('Y-m-d') . ' 00:00') {
+            continue;
+        }
+        $date = at(substr($block['start_at'], 0, 10));
+        foreach ([$date->modify('-1 day'), $date, at(substr($block['end_at'], 0, 10))] as $needed) {
+            $dates[$needed->format('Y-m-d')] = $needed;
+        }
+    }
+    $changes = [];
+    foreach ($exceptions as $exception) {
+        $changes[$exception['occurrence_day']][$exception['rule_id']] = $exception;
+    }
+
+    $recurring_windows = $occurrences = [];
+    foreach ($dates as $key => $date) {
+        foreach ($rules as $rule) {
+            if (!repeatsOn($rule, $date)) {
+                continue;
+            }
+            $exception = $changes[$key][$rule['id']] ?? null;
+            $original = shiftInterval($key, $rule['start_time'], $rule['end_time']);
+            $skip = ($exception['change_kind'] ?? '') === 'skip';
+            $interval = $exception && !$skip ? shiftInterval($key, $exception['start_time'], $exception['end_time']) : $original;
+            $window = ['title' => $rule['title'], 'kind' => $rule['kind'], 'start_at' => $interval[0], 'end_at' => $interval[1],
+                'rule_id' => $rule['id'], 'occurrence_day' => $key, 'exception' => $exception, 'skipped' => $skip];
+            if (!$skip) {
+                $recurring_windows[] = $window;
+            }
+            if ($key === $day) {
+                $occurrences[] = $window;
+            }
+            if ($exception && $exception['release_time'] && $rule['kind'] !== 'free') {
+                foreach ($skip ? [$original] : subtract([$original], ...$interval) as [$start, $end]) {
+                    $recurring_windows[] = ['title' => 'Tempo liberado · ' . $rule['title'], 'kind' => 'free', 'start_at' => $start,
+                        'end_at' => $end, 'released' => true];
+                }
+            }
+        }
+    }
+    return compact('recurring_windows', 'occurrences') + ['routine_horizon' => $last->modify('+1 day')->format('Y-m-d') . ' 00:00'];
 }
 
 function freeRanges(array $data, ?int $ignoreBlock = null): array
@@ -126,13 +190,14 @@ function plan(array $data, DateTimeImmutable $clock): array
     }
     $tasks = orderedTasks(array_values(array_filter($data['tasks'], fn(array $t): bool => !$t['done'])));
     $taskNow = null;
-    $forecasts = $late = $withoutTime = $near = $conflicts = [];
+    $forecasts = $late = $withoutTime = $beyondHorizon = $near = $conflicts = [];
     $validTasks = $conflictingTasks = [];
+    $unreserved = freeRanges(['windows' => $data['windows'], 'blocks' => []]);
     foreach ($data['blocks'] as $block) {
         if ($block['end_at'] <= $now) {
             continue;
         }
-        if (conflict($block, $data['windows'])) {
+        if (!intervalFits($unreserved, $block['start_at'], $block['end_at'])) {
             $conflicts[] = $block;
             if ($block['kind'] === 'task') {
                 $conflictingTasks[(int) $block['item_id']] = true;
@@ -171,7 +236,11 @@ function plan(array $data, DateTimeImmutable $clock): array
             }
         }
         if ($slot === null) {
-            $withoutTime[] = $task;
+            if (isset($data['routine_horizon']) && $task['due_at'] > $data['routine_horizon']) {
+                $beyondHorizon[] = $task;
+            } else {
+                $withoutTime[] = $task;
+            }
         } else {
             $projected = subtract($projected, ...$slot);
             if (allowedSuggestion($data, $key, $now)) {
@@ -180,7 +249,7 @@ function plan(array $data, DateTimeImmutable $clock): array
             }
         }
     }
-    return compact('ranges', 'current', 'taskNow', 'forecasts', 'late', 'withoutTime', 'near', 'conflicts');
+    return compact('ranges', 'current', 'taskNow', 'forecasts', 'late', 'withoutTime', 'beyondHorizon', 'near', 'conflicts');
 }
 
 function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current): array

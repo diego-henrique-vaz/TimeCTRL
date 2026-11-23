@@ -48,6 +48,37 @@ function timestamp(string $field): string
     return $value;
 }
 
+function shiftTimes(): array
+{
+    $start = field('start_time');
+    $end = field('end_time');
+    foreach ([$start, $end] as $time) {
+        if (!preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D', $time)) {
+            throw new DomainException('Informe horários de início e fim válidos.');
+        }
+    }
+    if ($start === $end) {
+        throw new DomainException('O início e o fim precisam ser diferentes.');
+    }
+    return [$start, $end];
+}
+
+function selectedWeekdays(): int
+{
+    $selected = $_POST['weekdays'] ?? null;
+    if (!is_array($selected) || $selected === [] || count($selected) > 7) {
+        throw new DomainException('Selecione pelo menos um dia da semana.');
+    }
+    $mask = 0;
+    foreach ($selected as $weekday) {
+        if (!is_string($weekday) || !array_key_exists($weekday, WEEKDAYS)) {
+            throw new DomainException('Selecione dias da semana válidos.');
+        }
+        $mask |= 1 << ((int) $weekday - 1);
+    }
+    return $mask;
+}
+
 function authenticate(PDO $db, string $action): void
 {
     $email = strtolower(field('email'));
@@ -164,15 +195,68 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 $message = 'Tarefa concluída.';
                 break;
             case 'add-window':
-                $kind = option('kind', ['free' => true, 'busy' => true, 'work' => true]);
+            case 'edit-window':
+                $kind = option('kind', WINDOW_TYPES);
                 $start = timestamp('start_at');
                 $end = timestamp('end_at');
                 if ($end <= $start || duration($start, $end) > 1440) {
                     throw new DomainException('O intervalo deve terminar depois do início e durar até 24 horas.');
                 }
                 $title = $kind === 'free' && field('title') === '' ? 'Horário livre' : requiredText('title', 120);
-                execute($db, 'INSERT INTO windows (user_id, title, kind, start_at, end_at) VALUES (?, ?, ?, ?, ?)', [$uid, $title, $kind, $start, $end]);
-                $message = 'Intervalo cadastrado.';
+                if ($action === 'edit-window') {
+                    $id = number('id', 1, PHP_INT_MAX);
+                    owned($db, 'windows', $uid, $id);
+                    execute($db, 'UPDATE windows SET title = ?, kind = ?, start_at = ?, end_at = ? WHERE user_id = ? AND id = ?',
+                        [$title, $kind, $start, $end, $uid, $id]);
+                    $message = 'Intervalo atualizado.';
+                } else {
+                    execute($db, 'INSERT INTO windows (user_id, title, kind, start_at, end_at) VALUES (?, ?, ?, ?, ?)', [$uid, $title, $kind, $start, $end]);
+                    $message = 'Intervalo cadastrado.';
+                }
+                break;
+            case 'save-rule':
+                $kind = option('kind', WINDOW_TYPES);
+                $title = $kind === 'free' && field('title') === '' ? 'Horário livre' : requiredText('title', 120);
+                $weekdays = selectedWeekdays();
+                $first = field('first_day');
+                if (!dateValid($first)) {
+                    throw new DomainException('Informe a data de início da rotina.');
+                }
+                $times = shiftTimes();
+                if (field('id') === '') {
+                    execute($db, 'INSERT INTO recurring_windows (user_id, title, kind, weekdays, first_day, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [$uid, $title, $kind, $weekdays, $first, ...$times]);
+                } else {
+                    $id = number('id', 1, PHP_INT_MAX);
+                    owned($db, 'recurring_windows', $uid, $id);
+                    execute($db, 'UPDATE recurring_windows SET title = ?, kind = ?, weekdays = ?, first_day = ?, start_time = ?, end_time = ? WHERE user_id = ? AND id = ?',
+                        [$title, $kind, $weekdays, $first, ...$times, $uid, $id]);
+                }
+                $message = 'Rotina semanal salva.';
+                break;
+            case 'delete-rule':
+                $id = number('id', 1, PHP_INT_MAX);
+                owned($db, 'recurring_windows', $uid, $id);
+                execute($db, 'DELETE FROM recurring_windows WHERE user_id = ? AND id = ?', [$uid, $id]);
+                $message = 'Rotina semanal removida.';
+                break;
+            case 'save-exception':
+                $id = number('rule_id', 1, PHP_INT_MAX);
+                $rule = owned($db, 'recurring_windows', $uid, $id);
+                if (!repeatsOn($rule, at($day))) {
+                    throw new DomainException('Esta rotina não tem um horário nessa data.');
+                }
+                $change = option('change_kind', ['change' => true, 'skip' => true, 'reset' => true]);
+                $keys = ['user_id' => $uid, 'rule_id' => $id, 'occurrence_day' => $day];
+                if ($change === 'reset') {
+                    execute($db, 'DELETE FROM window_exceptions WHERE user_id = ? AND rule_id = ? AND occurrence_day = ?', array_values($keys));
+                    $message = 'Horário habitual restaurado para este dia.';
+                    break;
+                }
+                [$start, $end] = $change === 'change' ? shiftTimes() : ['', ''];
+                replaceRow($db, 'window_exceptions', $keys, ['change_kind' => $change, 'start_time' => $start,
+                    'end_time' => $end, 'release_time' => (int) ($rule['kind'] !== 'free' && field('release_time') === '1')]);
+                $message = 'Ajuste salvo somente para este dia.';
                 break;
             case 'remove-window':
             case 'remove-block':
@@ -239,7 +323,8 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
             case 'move-block':
                 $id = number('id', 1, PHP_INT_MAX);
                 $block = owned($db, 'blocks', $uid, $id);
-                saveBlock($db, $uid, userData($db, $uid, $day), timestamp('start_at'), $block['kind'], (int) $block['item_id'], $now, $id);
+                $start = timestamp('start_at');
+                saveBlock($db, $uid, userData($db, $uid, substr($start, 0, 10)), $start, $block['kind'], (int) $block['item_id'], $now, $id);
                 $message = 'Bloco reagendado.';
                 break;
             case 'suggestion':
@@ -251,7 +336,7 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 $decision = option('decision', ['accept' => true, 'later' => true, 'dismiss' => true]);
                 if ($decision === 'accept') {
                     $start = max($now, timestamp('start_at'));
-                    saveBlock($db, $uid, userData($db, $uid, $day), $start, $kind, $item, $now);
+                    saveBlock($db, $uid, userData($db, $uid, substr($start, 0, 10)), $start, $kind, $item, $now);
                     $message = 'Sugestão adicionada à agenda.';
                 } else {
                     replaceRow($db, 'feedback', ['user_id' => $uid, 'plan_day' => $day, 'item_key' => "$kind:$item"], [

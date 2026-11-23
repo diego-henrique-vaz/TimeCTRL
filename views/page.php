@@ -29,6 +29,25 @@ function choices(array $options, string|int $value): void
     }
 }
 
+function weeklyFields(array $rule): void
+{
+    ?>
+    <div class="form-grid">
+        <label>Tipo<select name="kind"><?php choices(WINDOW_TYPES, $rule['kind']); ?></select></label>
+        <label>Nome<input name="title" maxlength="120" value="<?= h($rule['title']) ?>" placeholder="Ex.: Trabalho"></label>
+        <label>A partir de<input type="date" name="first_day" required value="<?= h($rule['first_day']) ?>"></label>
+        <label>Início<input type="time" name="start_time" required value="<?= h($rule['start_time']) ?>"></label>
+        <label>Fim<input type="time" name="end_time" required value="<?= h($rule['end_time']) ?>"></label>
+    </div>
+    <fieldset class="weekdays">
+        <legend>Dias da semana</legend>
+        <?php foreach (WEEKDAYS as $number => $name): ?>
+            <label><input type="checkbox" name="weekdays[]" value="<?= $number ?>" <?= ($rule['weekdays'] & (1 << ($number - 1))) ? 'checked' : '' ?>><?= h($name) ?></label>
+        <?php endforeach; ?>
+    </fieldset>
+    <?php
+}
+
 function proposalForm(array $item, string $view, array $dayArg): void
 {
     ?>
@@ -89,11 +108,18 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
     <header class="page-header">
         <h1><?= h($headings[$view]) ?></h1>
         <?php if (in_array($view, ['today', 'agenda'], true)): ?>
+        <div class="actions" aria-label="Navegação por data">
+            <?php if ($day > $today): ?>
+                <a class="subtle link-button" href="<?= h(url($view, ['date' => at($day)->modify('-1 day')->format('Y-m-d')])) ?>" aria-label="Dia anterior">‹</a>
+                <a class="subtle link-button" href="<?= h(url($view)) ?>">Hoje</a>
+            <?php endif; ?>
         <form method="get" action="/" class="date-picker">
             <input type="hidden" name="view" value="<?= h($view) ?>">
             <label><span class="sr">Data da agenda</span><input name="date" type="date" min="<?= h($today) ?>" value="<?= h($day) ?>"></label>
             <button class="subtle">Ver dia</button>
         </form>
+            <a class="subtle link-button" href="<?= h(url($view, ['date' => at($day)->modify('+1 day')->format('Y-m-d')])) ?>" aria-label="Próximo dia">›</a>
+        </div>
         <?php endif; ?>
     </header>
     <?php if ($notice): ?><p class="flash" role="status"><?= h($notice) ?></p><?php endif; ?>
@@ -147,7 +173,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
         </div>
         <section class="panel lists">
             <h2>Prazos e conflitos</h2>
-            <?php if (!$summary['late'] && !$summary['withoutTime'] && !$summary['conflicts'] && !$summary['near']): ?>
+            <?php if (!$summary['late'] && !$summary['withoutTime'] && !$summary['beyondHorizon'] && !$summary['conflicts'] && !$summary['near']): ?>
                 <p class="muted">Nenhum prazo próximo ou conflito na agenda.</p>
             <?php endif; ?>
             <?php foreach ($summary['late'] as $task): ?>
@@ -157,8 +183,11 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                 <p class="alert-line" data-alert="no-slot"><strong>Sem horário antes do prazo.</strong> <?= h($task['title']) ?> precisa de <?= h($task['minutes']) ?> min até <?= h(stamp($task['due_at'])) ?>.</p>
             <?php endforeach; ?>
             <?php foreach ($summary['conflicts'] as $block): ?>
-                <p class="alert-line" data-alert="conflict"><strong>Conflito na agenda.</strong> <?= h($block['title']) ?> · <a href="<?= h(url('agenda', $dayArg)) ?>">Ajustar bloco</a></p>
+                <p class="alert-line" data-alert="conflict"><strong>Conflito na agenda.</strong> <?= h($block['title']) ?> · <a href="<?= h(url('agenda', ['date' => max($today, substr($block['start_at'], 0, 10))])) ?>">Ajustar bloco</a></p>
             <?php endforeach; ?>
+            <?php if ($summary['beyondHorizon']): ?>
+                <p class="info-line">Sem encaixe nos próximos 90 dias para <?= h(implode(', ', array_column($summary['beyondHorizon'], 'title'))) ?>. O prazo dessas tarefas vai além desse período.</p>
+            <?php endif; ?>
             <?php $without = array_column($summary['withoutTime'], 'id'); ?>
             <?php foreach ($summary['near'] as $task): if (in_array($task['id'], $without, true)) continue; ?>
                 <p class="info-line" data-alert="near"><strong>Entrega próxima.</strong> <?= h($task['title']) ?> · <?= h(stamp($task['due_at'])) ?></p>
@@ -169,12 +198,11 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
             <?php $suggested = false; foreach ($summary['forecasts'] as $item):
                 if ($suggestion && $item['key'] === $suggestion['key']) continue;
                 $suggested = true;
-                $hasBlock = in_array($item['id'], array_map(fn($b) => (int) $b['item_id'],
-                    array_filter($data['blocks'], fn($b) => $b['kind'] === 'task' && $b['end_at'] > timeKey($clock))), true);
+                $existing = array_column(array_filter($data['blocks'], fn($b) => $b['kind'] === 'task' && $b['end_at'] > timeKey($clock)), null, 'item_id')[$item['id']] ?? null;
                 ?>
                 <article class="entry" data-forecast>
                     <div><h3><?= h($item['title']) ?></h3><p><?= h(stamp($item['start'])) ?>–<?= h(at($item['end'])->format('H:i')) ?></p></div>
-                    <?php if ($hasBlock): ?><a href="<?= h(url('agenda', $dayArg)) ?>">Ajustar bloco existente</a><?php else: ?><?php proposalForm($item, $view, $dayArg); ?><?php endif; ?>
+                    <?php if ($existing): ?><a href="<?= h(url('agenda', ['date' => max($today, substr($existing['start_at'], 0, 10))])) ?>">Ajustar bloco existente</a><?php else: ?><?php proposalForm($item, $view, $dayArg); ?><?php endif; ?>
                 </article>
             <?php endforeach; if (!$suggested): ?><p class="muted">Não há outros encaixes para mostrar.</p><?php endif; ?>
         </section>
@@ -224,11 +252,41 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
         </section>
 
     <?php elseif ($view === 'agenda'): ?>
+        <section class="panel" id="rotina">
+            <h2>Rotina semanal</h2>
+            <details class="entry">
+                <summary>Adicionar horário recorrente</summary>
+                <form method="post" class="stack inset" action="<?= h(url($view, $dayArg)) ?>">
+                    <?php fields('save-rule'); weeklyFields(['kind' => 'work', 'title' => '', 'weekdays' => 31,
+                        'first_day' => $day, 'start_time' => '07:30', 'end_time' => '14:30']); ?>
+                    <p class="muted">Se o fim for mais cedo que o início, o intervalo termina no dia seguinte.</p>
+                    <button>Salvar rotina semanal</button>
+                </form>
+            </details>
+            <?php foreach ($data['rules'] as $rule): ?>
+                <details class="entry" data-rule="<?= h($rule['id']) ?>">
+                    <summary><strong><?= h($rule['title']) ?></strong><span><?= h(implode(' · ', array_filter(WEEKDAYS,
+                        fn($number) => $rule['weekdays'] & (1 << ($number - 1)), ARRAY_FILTER_USE_KEY))) ?> · <?= h($rule['start_time']) ?>–<?= h($rule['end_time']) ?></span></summary>
+                    <div class="stack inset">
+                        <form method="post" class="stack" action="<?= h(url($view, $dayArg)) ?>">
+                            <?php fields('save-rule'); ?><input type="hidden" name="id" value="<?= h($rule['id']) ?>">
+                            <?php weeklyFields($rule); ?><button>Salvar rotina semanal</button>
+                        </form>
+                        <details><summary>Excluir rotina</summary>
+                            <p class="muted">Remove os horários recorrentes e os ajustes de cada dia desta rotina.</p>
+                            <form method="post" action="<?= h(url($view, $dayArg)) ?>">
+                                <?php fields('delete-rule'); ?><input type="hidden" name="id" value="<?= h($rule['id']) ?>"><button class="quiet">Excluir rotina semanal</button>
+                            </form>
+                        </details>
+                    </div>
+                </details>
+            <?php endforeach; ?>
+        </section>
         <section class="panel">
             <h2>Novo intervalo</h2>
             <form method="post" class="form-grid" action="<?= h(url($view, $dayArg)) ?>">
                 <?php fields('add-window'); ?>
-                <label>Tipo<select name="kind"><?php choices(['free' => 'Livre', 'busy' => 'Compromisso', 'work' => 'Trabalho'], 'free'); ?></select></label>
+                <label>Tipo<select name="kind"><?php choices(WINDOW_TYPES, 'free'); ?></select></label>
                 <label>Nome<input name="title" maxlength="120" placeholder="Obrigatório para compromissos"></label>
                 <label>Início<input type="datetime-local" name="start_at" required value="<?= h($startDefault) ?>"></label>
                 <label>Fim<input type="datetime-local" name="end_at" required value="<?= h($endDefault) ?>"></label>
@@ -240,17 +298,58 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                 <h2>Intervalos cadastrados</h2>
                 <?php $until = at($day)->modify('+1 day')->format('Y-m-d') . ' 00:00';
                 $from = $day . ' 00:00';
-                $events = array_values(array_filter($data['windows'], fn($w) => overlaps($w['start_at'], $w['end_at'], $from, $until)));
+                $events = array_merge($data['occurrences'] ?? [], array_filter($data['windows'],
+                    fn($w) => ($w['occurrence_day'] ?? null) !== $day && overlaps($w['start_at'], $w['end_at'], $from, $until)));
                 usort($events, fn($a,$b) => $a['start_at'] <=> $b['start_at']); ?>
                 <?php if (!$events): ?><p class="muted">Sem intervalos nesta data.</p><?php endif; ?>
                 <?php foreach ($events as $event): ?>
-                    <article class="entry">
-                        <div><h3><?= h($event['title']) ?></h3><p><?= h(stamp($event['start_at'])) ?>–<?= h(at($event['end_at'])->format('H:i')) ?></p>
-                            <small class="tag"><?= h(['free'=>'Livre','busy'=>'Compromisso','work'=>'Trabalho'][$event['kind']]) ?></small></div>
-                        <form method="post" action="<?= h(url($view, $dayArg)) ?>">
-                            <?php fields('remove-window'); ?><input type="hidden" name="id" value="<?= h($event['id']) ?>"><button class="quiet">Remover</button>
-                        </form>
-                    </article>
+                    <?php $exception = $event['exception'] ?? null;
+                    $eventTime = stamp($event['start_at']) . '–' . (substr($event['end_at'], 0, 10) === substr($event['start_at'], 0, 10)
+                        ? substr($event['end_at'], 11) : stamp($event['end_at'])); ?>
+                    <details class="entry" <?= isset($event['rule_id']) ? 'data-occurrence' : '' ?>>
+                        <summary><strong><?= h($event['title']) ?></strong><span><?= h($eventTime) ?></span>
+                            <span class="tag"><?= h(WINDOW_TYPES[$event['kind']]) ?></span>
+                            <?php if (isset($event['rule_id'])): ?><span class="tag"><?= $exception ? ($event['skipped'] ? 'Cancelado neste dia' : 'Ajustado neste dia') : 'Semanal' ?></span><?php endif; ?>
+                        </summary>
+                        <div class="stack inset">
+                        <?php if (isset($event['rule_id']) && $event['occurrence_day'] === $day): ?>
+                            <form method="post" class="stack" action="<?= h(url($view, $dayArg)) ?>">
+                                <?php fields('save-exception'); ?><input type="hidden" name="rule_id" value="<?= h($event['rule_id']) ?>">
+                                <strong>Ajustar só este dia</strong>
+                                <div class="form-grid">
+                                    <label>Início neste dia<input type="time" name="start_time" required value="<?= h(substr($event['start_at'], 11)) ?>"></label>
+                                    <label>Fim neste dia<input type="time" name="end_time" required value="<?= h(substr($event['end_at'], 11)) ?>"></label>
+                                </div>
+                                <?php if ($event['kind'] !== 'free'): ?>
+                                    <label class="check-option"><input type="checkbox" name="release_time" value="1" <?= !empty($exception['release_time']) ? 'checked' : '' ?>>Marcar o tempo liberado como livre</label>
+                                <?php endif; ?>
+                                <div class="actions">
+                                    <button name="change_kind" value="change">Salvar só este dia</button>
+                                    <?php if (!$event['skipped']): ?><button class="quiet" name="change_kind" value="skip" formnovalidate>Cancelar só este dia</button><?php endif; ?>
+                                    <?php if ($exception): ?><button class="subtle" name="change_kind" value="reset" formnovalidate>Restaurar horário habitual</button><?php endif; ?>
+                                </div>
+                            </form>
+                        <?php elseif (isset($event['id'])): ?>
+                            <form method="post" class="stack" action="<?= h(url($view, $dayArg)) ?>">
+                                <?php fields('edit-window'); ?><input type="hidden" name="id" value="<?= h($event['id']) ?>">
+                                <label>Nome<input name="title" maxlength="120" value="<?= h($event['title']) ?>"></label>
+                                <label>Tipo<select name="kind"><?php choices(WINDOW_TYPES, $event['kind']); ?></select></label>
+                                <label>Início<input type="datetime-local" name="start_at" required value="<?= h(inputStamp($event['start_at'])) ?>"></label>
+                                <label>Fim<input type="datetime-local" name="end_at" required value="<?= h(inputStamp($event['end_at'])) ?>"></label>
+                                <button>Salvar intervalo</button>
+                            </form>
+                            <form method="post" action="<?= h(url($view, $dayArg)) ?>">
+                                <?php fields('remove-window'); ?><input type="hidden" name="id" value="<?= h($event['id']) ?>"><button class="quiet">Remover intervalo</button>
+                            </form>
+                        <?php elseif (!empty($event['released'])): ?>
+                            <p class="muted">Este intervalo livre vem de um ajuste na sua rotina.</p>
+                        <?php elseif ($event['occurrence_day'] >= $today): ?>
+                            <a href="<?= h(url('agenda', ['date' => $event['occurrence_day']])) ?>">Ajustar na data de início</a>
+                        <?php else: ?>
+                            <p class="muted">Este intervalo começou no dia anterior.</p>
+                        <?php endif; ?>
+                        </div>
+                    </details>
                 <?php endforeach; ?>
             </section>
             <section class="panel lists">
@@ -259,6 +358,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                 usort($blocks, fn($a,$b) => $a['start_at'] <=> $b['start_at']); ?>
                 <?php if (!$blocks): ?><p class="muted">Nenhum bloco aceito nesta data.</p><?php endif; ?>
                 <?php foreach ($blocks as $block): ?>
+                    <div class="scheduled-entry">
                     <details class="entry" data-block="<?= h($block['id']) ?>">
                         <summary><strong><?= h($block['title']) ?></strong><span><?= h(stamp($block['start_at'])) ?>–<?= h(at($block['end_at'])->format('H:i')) ?></span>
                             <?php if (conflict($block, $data['windows'])): ?><span class="tag conflict">Conflito</span><?php endif; ?></summary>
@@ -272,6 +372,12 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                             </form>
                         </div>
                     </details>
+                    <?php if ($block['kind'] === 'task'): ?>
+                        <form method="post" action="<?= h(url($view, $dayArg)) ?>">
+                            <?php fields('done-task'); ?><input type="hidden" name="id" value="<?= h($block['item_id']) ?>"><button class="subtle">Concluir tarefa</button>
+                        </form>
+                    <?php endif; ?>
+                    </div>
                 <?php endforeach; ?>
             </section>
         </div>
