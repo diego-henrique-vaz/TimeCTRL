@@ -97,21 +97,38 @@ unset($_SESSION['notice']);
 $data = $account ? userData($db, (int) $account['id'], $day) : null;
 $summary = $data ? plan($data, $focus) : null;
 $dayRanges = $summary ? rangesOnDay($summary['ranges'], $day, $clock) : [];
-$suggestion = $leisureOption = null;
+$suggestion = $leisureOption = $restOption = null;
 $leisureAlternative = false;
+$scheduledTasks = $freeMinutes = 0;
 if ($data && $view === 'today') {
     $mode = $data['choice']['mode'];
-    $suggestion = $day === $today ? recommendation($data, $summary, $clock) : null;
-    if ($mode === 'leisure' || $mode === 'rest' || ($mode === 'balance' && ($suggestion['kind'] ?? null) !== 'interest')) {
-        [$leisure, $rest] = upcomingLeisure($data, $clock, $dayRanges);
-        if ($mode === 'balance' && $leisure) {
-            $afterTasks = rangesOnDay($summary['unallocated'], $day, $clock);
-            [$compatible] = upcomingLeisure($data, $clock, $afterTasks);
-            $leisureOption = $compatible ?? $leisure;
-            $leisureAlternative = $compatible === null;
-        } elseif ($mode !== 'balance') {
-            $suggestion = $mode === 'leisure' ? $leisure : $rest;
+    $until = timeKey(at($day)->modify('+1 day'));
+    $from = max($day . ' 00:00', timeKey($clock));
+    $conflicts = array_column($summary['conflicts'], 'id');
+    foreach ($data['blocks'] as $block) {
+        if ($block['kind'] === 'task' && !in_array($block['id'], $conflicts, true)
+            && overlaps($block['start_at'], $block['end_at'], $from, $until)) {
+            $scheduledTasks++;
         }
+    }
+    $freeMinutes = array_sum(array_map(static fn(array $range): int => duration(...$range), $dayRanges));
+    $suggestion = $day === $today ? recommendation($data, $summary, $clock) : null;
+    if ($mode === 'balance') {
+        $afterTasks = rangesOnDay($summary['unallocated'], $day, $clock);
+        [$compatible, $compatibleRest] = upcomingLeisure($data, $clock, $afterTasks);
+        if (($suggestion['kind'] ?? null) !== 'interest') {
+            $leisureOption = $compatible;
+            if (!$leisureOption) {
+                [$leisureOption] = upcomingLeisure($data, $clock, $dayRanges);
+                $leisureAlternative = $leisureOption !== null;
+            }
+        }
+        if ($scheduledTasks && ($suggestion['kind'] ?? null) !== 'rest') {
+            $restOption = $compatibleRest;
+        }
+    } elseif ($mode === 'leisure' || $mode === 'rest') {
+        [$leisure, $rest] = upcomingLeisure($data, $clock, $dayRanges);
+        $suggestion = $mode === 'leisure' ? $leisure : $rest;
     }
 }
 $holiday = HOLIDAYS[$day] ?? null;

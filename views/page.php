@@ -63,6 +63,7 @@ function proposalForm(array $item, string $view, array $dayArg): void
         <input type="hidden" name="kind" value="<?= h($item['kind']) ?>">
         <input type="hidden" name="item" value="<?= h($item['id']) ?>">
         <input type="hidden" name="start_at" value="<?= h($item['start']) ?>">
+        <?php if ($item['kind'] === 'rest'): ?><input type="hidden" name="rest_minutes" value="<?= h($item['minutes']) ?>"><?php endif; ?>
         <button name="decision" value="accept">Aceitar horário</button>
         <button class="subtle" name="decision" value="later">Adiar</button>
         <button class="quiet" name="decision" value="dismiss">Dispensar</button>
@@ -163,7 +164,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                         <p class="time"><?= h(at($suggestion['start'])->format('H:i')) ?>–<?= h(at($suggestion['end'])->format('H:i')) ?></p>
                         <?php proposalForm($suggestion, $view, $dayArg); ?>
                     </div>
-                <?php elseif ($dayRanges && ($data['choice']['mode'] !== 'balance' || !$leisureOption)): ?>
+                <?php elseif ($dayRanges && ($data['choice']['mode'] !== 'balance' || (!$leisureOption && !$restOption))): ?>
                     <p class="recommendation">Nenhuma sugestão se encaixa no tempo disponível para esse foco.</p>
                 <?php endif; ?>
             </section>
@@ -186,6 +187,16 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                 </details>
             </section>
         </div>
+        <?php if ($scheduledTasks && $freeMinutes): ?>
+            <section class="panel" data-remaining-time>
+                <h2>Tempo livre depois dos blocos marcados</h2>
+                <p><?= h($scheduledTasks) ?> <?= $scheduledTasks === 1 ? 'tarefa já marcada' : 'tarefas já marcadas' ?> · <?= h($freeMinutes) ?> min livres <?= $day === $today ? 'hoje' : 'neste dia' ?>.</p>
+                <?php if ($data['choice']['mode'] === 'balance' && ($leisureOption || $restOption || $suggestion)): ?>
+                    <p class="muted">Quer encaixar algum lazer ou uma pausa nesse tempo?</p>
+                <?php endif; ?>
+            </section>
+        <?php endif; ?>
+        <?php if ($leisureOption || $restOption): ?><div class="<?= $leisureOption && $restOption ? 'two-columns' : '' ?>"><?php endif; ?>
         <?php if ($leisureOption): ?>
             <section class="panel" data-leisure-option>
                 <h2>Sugestão de lazer</h2>
@@ -198,7 +209,20 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                     <?php proposalForm($leisureOption, $view, $dayArg); ?>
                 </div>
             </section>
-        <?php elseif ($dayRanges && !$data['interests'] && in_array($data['choice']['mode'], ['balance', 'leisure'], true)): ?>
+        <?php endif; ?>
+        <?php if ($restOption): ?>
+            <section class="panel" data-rest-option>
+                <h2>Sugestão de descanso</h2>
+                <div class="recommendation">
+                    <h3>Pausa de <?= h($restOption['minutes']) ?> min</h3>
+                    <p><?= h($restOption['reason']) ?></p>
+                    <p class="time"><?= h(stamp($restOption['start'])) ?>–<?= h(substr($restOption['end'], 11)) ?></p>
+                    <?php proposalForm($restOption, $view, $dayArg); ?>
+                </div>
+            </section>
+        <?php endif; ?>
+        <?php if ($leisureOption || $restOption): ?></div><?php endif; ?>
+        <?php if ($dayRanges && !$data['interests'] && in_array($data['choice']['mode'], ['balance', 'leisure'], true)): ?>
             <p class="panel"><a href="<?= h(url('interests')) ?>">Cadastre um interesse</a> para receber sugestões de lazer.</p>
         <?php endif; ?>
         <section class="panel lists">
@@ -467,14 +491,14 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
             </section>
             <section class="panel">
                 <h2>Minhas preferências</h2>
-                <p class="muted">Use zero para desligar as metas de leitura, pausa por sequência ou limite de jogo.</p>
+                <p class="muted">Registre o que fez em cada dia. As sugestões dependem do tempo livre daquela data. Use zero para desativar metas de frequência ou o limite de jogo.</p>
                 <form method="post" class="stack" action="<?= h(url($view, $dayArg)) ?>">
                     <?php fields('save-goals'); ?>
                     <?php foreach ([
                         'reading_sessions' => ['Leituras por semana', 0, 30],
                         'busy_days' => ['Dias seguidos de trabalho ou estudo para sugerir pausa', 0, 30],
-                        'rest_minutes' => ['Duração da pausa (min)', 5, 180],
-                        'gaming_minutes' => ['Limite semanal de jogo (min)', 0, 10080],
+                        'rest_minutes' => ['Duração preferida da pausa (min)', MIN_REST_MINUTES, 180],
+                        'gaming_minutes' => ['Limite semanal de jogo (min, 0 = sem limite)', 0, 10080],
                     ] as $key => [$label, $min, $max]): ?>
                         <label><?= h($label) ?><input type="number" name="<?= h($key) ?>" required min="<?= h($min) ?>" max="<?= h($max) ?>" value="<?= h($data['goals'][$key]) ?>"></label>
                     <?php endforeach; ?><button>Salvar preferências</button>

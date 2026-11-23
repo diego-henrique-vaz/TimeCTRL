@@ -144,7 +144,11 @@ function saveBlock(PDO $db, int $uid, array $data, string $start, string $kind, 
     } else {
         $title = 'Pausa';
         $oldBlock = $blockId === null ? null : owned($db, 'blocks', $uid, $blockId);
-        $minutes = $oldBlock ? duration($oldBlock['start_at'], $oldBlock['end_at']) : (int) $data['goals']['rest_minutes'];
+        $configured = (int) $data['goals']['rest_minutes'];
+        $minutes = $oldBlock ? duration($oldBlock['start_at'], $oldBlock['end_at']) : $configured;
+        if (!$oldBlock && field('rest_minutes') !== '') {
+            $minutes = number('rest_minutes', MIN_REST_MINUTES, $configured);
+        }
     }
     $end = addMinutes($start, $minutes);
     if ($minutes < 1 || $start < $now || !intervalFits(freeRanges($data, $blockId), $start, $end)) {
@@ -306,7 +310,7 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 replaceRow($db, 'goals', ['user_id' => $uid], [
                     'reading_sessions' => number('reading_sessions', 0, 30),
                     'busy_days' => number('busy_days', 0, 30),
-                    'rest_minutes' => number('rest_minutes', 5, 180),
+                    'rest_minutes' => number('rest_minutes', MIN_REST_MINUTES, 180),
                     'gaming_minutes' => number('gaming_minutes', 0, 10080),
                 ]);
                 break;

@@ -390,6 +390,44 @@ async function main() {
     assert.equal(await option.count(), 0);
     await routineContext.close();
     console.log('OK rotina semanal: data escolhida, exceções, conclusão na agenda e lazer mesmo com tarefas pendentes');
+
+    const remainingContext = await browser.newContext();
+    const remaining = await remainingContext.newPage();
+    await register(remaining, weekly, 'Ensaio do tempo livre');
+    await windowForm(remaining, weekly, '2026-11-23T15:00', '2026-11-23T17:00', 'free', 'Janela da tarde');
+    await interestForm(remaining, weekly, 'Uma partida', 'game', 30);
+    await taskForm(remaining, weekly, 'Primeira entrega', '2026-11-23T17:00', 40, 3);
+    await taskForm(remaining, weekly, 'Segunda entrega', '2026-11-23T17:00', 40, 2);
+    await remaining.goto(weekly);
+    for (const title of ['Primeira entrega', 'Segunda entrega']) {
+      await remaining.locator('[data-forecast]').filter({hasText:title}).getByRole('button', {name:'Aceitar horário'}).click();
+      await remaining.getByRole('status').getByText('Sugestão adicionada à agenda.').waitFor();
+    }
+    assert.match(await remaining.locator('[data-remaining-time]').innerText(), /2 tarefas já marcadas · 40 min livres hoje/);
+    assert.match(await remaining.locator('[data-leisure-option]').innerText(), /Uma partida[\s\S]+16:20–16:50/);
+    assert.match(await remaining.locator('[data-rest-option]').innerText(), /Pausa de 25 min[\s\S]+16:20–16:45/);
+
+    await remaining.goto(at(weekly, 'agenda'));
+    const window = remaining.locator('details.entry').filter({hasText:'Janela da tarde'});
+    await window.locator('summary').click();
+    await window.locator('[name=end_at]').fill('2026-11-23T16:30');
+    await window.getByRole('button', {name:'Salvar intervalo'}).click();
+    await remaining.getByRole('status').getByText('Intervalo atualizado.').waitFor();
+    await remaining.goto(weekly);
+    assert.match(await remaining.locator('[data-remaining-time]').innerText(), /2 tarefas já marcadas · 10 min livres hoje/);
+    assert.equal(await remaining.locator('[data-leisure-option]').count(), 0);
+    const preferredFocus = form(remaining, 'save-choice');
+    await preferredFocus.locator('[name=mode]').selectOption('rest');
+    await preferredFocus.getByRole('button', {name:'Salvar foco'}).click();
+    await remaining.getByRole('status').getByText('Preferência do dia atualizada.').waitFor();
+    const shortRest = remaining.locator('[data-recommendation=rest]');
+    assert.match(await shortRest.innerText(), /10 min[\s\S]+16:20–16:30/);
+    await shortRest.getByRole('button', {name:'Aceitar horário'}).click();
+    await remaining.getByRole('status').getByText('Sugestão adicionada à agenda.').waitFor();
+    await remaining.goto(at(weekly, 'agenda'));
+    assert.match(await remaining.locator('[data-block]').filter({hasText:'Pausa'}).innerText(), /16:20–16:30/);
+    await remainingContext.close();
+    console.log('OK tempo livre: dois blocos de tarefa, lazer e pausa no saldo, e pausa reduzida gravada corretamente');
   } catch (error) {
     if (chrome) console.error(chrome.logText().slice(-1200));
     throw error;

@@ -9,6 +9,7 @@ const PRIORITIES = [3 => 'Alta', 2 => 'Normal', 1 => 'Baixa'];
 const ROUTINES = ['usual' => 'Manter a agenda cadastrada', 'works' => 'Vou trabalhar no feriado', 'changed' => 'Minha rotina mudou'];
 const WINDOW_TYPES = ['free' => 'Livre', 'busy' => 'Compromisso', 'work' => 'Trabalho'];
 const WEEKDAYS = [1 => 'Seg', 2 => 'Ter', 3 => 'Qua', 4 => 'Qui', 5 => 'Sex', 6 => 'Sáb', 7 => 'Dom'];
+const MIN_REST_MINUTES = 5;
 
 function at(string $value): DateTimeImmutable
 {
@@ -323,9 +324,9 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
             'start' => $start, 'end' => $finish, 'reason' => $reason];
         break;
     }
-    $finish = addMinutes($start, (int) $goals['rest_minutes']);
+    $restMinutes = min((int) $goals['rest_minutes'], duration($start, $end));
     $rest = null;
-    if ($finish <= $end && $goals['rest_minutes'] > 0 && !isset($reserved['rest:0']) && allowedSuggestion($data, 'rest:0', $now)) {
+    if ($restMinutes >= MIN_REST_MINUTES && !isset($reserved['rest:0']) && allowedSuggestion($data, 'rest:0', $now)) {
         $streak = 0;
         $activityDate = isset($busyDays[$day]) ? $date : $date->modify('-1 day');
         while (isset($busyDays[$activityDate->format('Y-m-d')])) {
@@ -333,10 +334,12 @@ function leisureOptions(array $data, DateTimeImmutable $clock, ?array $current):
             $activityDate = $activityDate->modify('-1 day');
         }
         $rest = ['key' => 'rest:0', 'kind' => 'rest', 'id' => 0, 'title' => 'Reservar uma pausa',
-            'start' => $start, 'end' => $finish, 'reason' => 'Há um horário livre suficiente para a pausa que você configurou.',
+            'start' => $start, 'end' => addMinutes($start, $restMinutes), 'minutes' => $restMinutes,
+            'reason' => $restMinutes < (int) $goals['rest_minutes']
+                ? "Uma pausa de $restMinutes min cabe neste intervalo livre." : "Há tempo para uma pausa de $restMinutes min.",
             'goalReached' => $goals['busy_days'] > 0 && $streak >= $goals['busy_days']];
         if ($rest['goalReached']) {
-            $rest['reason'] = "Você registrou $streak dias seguidos com trabalho ou estudo. Há tempo livre para uma pausa.";
+            $rest['reason'] = "Você registrou $streak dias seguidos com trabalho ou estudo. Uma pausa de $restMinutes min cabe neste intervalo livre.";
         }
     }
     return [$leisure, $rest];
