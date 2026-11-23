@@ -21,7 +21,7 @@ const tag = () => randomUUID();
 async function serve(clock, run) {
   const server = spawn(php, ['-d','session.save_path=var/sessions','-S','127.0.0.1:' + port,'-t','public'], {
     cwd:site, windowsHide:true, stdio:['ignore','ignore','pipe'],
-    env:{...process.env,TIMECTRL_DB:path.join(dir,'test.sqlite'),TIMECTRL_NOW:clock},
+    env:{...process.env,TIMECTRL_DB:path.join(dir,'test.sqlite'),TIMECTRL_NOW:clock,TIMECTRL_OPENROUTER_KEY:''},
   });
   let log = '';
   server.stderr.on('data', bytes => { log = (log + bytes).slice(-1600); });
@@ -85,6 +85,9 @@ async function main() {
     assert.doesNotMatch(await a(view('agenda')), /Intervalo invertido/);
     const home=await a(view('today'));
     assert.match(home,/data-free-minutes>40/);
+    assert.match(home,/Configure a chave do OpenRouter/);
+    assert.match(await a(view('today'),'review-ai',{},422),/Configure a chave OpenRouter/);
+    assert.match(await a(view('today'),'review-ai',{},403,false),/formulário expirou/);
     assert.match(home,/data-recommendation="task">\s*<h3>Questionário/);
     assert.match(home,/Relatório<\/h3><p>[^<]*20:00/);
     const proposal=/name="item" value="(\d+)">\s*<input type="hidden" name="start_at" value="2026-11-19 20:00"/.exec(home);

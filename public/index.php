@@ -8,6 +8,7 @@ require __DIR__ . '/../app/store.php';
 require __DIR__ . '/../app/calendar.php';
 require __DIR__ . '/../app/planner.php';
 require __DIR__ . '/../app/actions.php';
+require __DIR__ . '/../app/ai.php';
 
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store');
@@ -51,9 +52,13 @@ function redirect(string $view = 'today', array $args = []): never
 }
 
 $error = '';
+$aiConfig = null;
 try {
     $db = database();
-    $account = isset($_SESSION['uid']) ? one($db, 'SELECT id, name FROM users WHERE id = ?', [$_SESSION['uid']]) : null;
+    $account = isset($_SESSION['uid']) ? one($db, 'SELECT id, name, revision FROM users WHERE id = ?', [$_SESSION['uid']]) : null;
+    if ($account && in_array($view, ['today', 'login', 'signup'], true)) {
+        $aiConfig = aiConfiguration();
+    }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!hash_equals($_SESSION['csrf'], field('csrf'))) {
             http_response_code(403);
@@ -71,6 +76,25 @@ try {
             $_SESSION = [];
             session_regenerate_id(true);
             redirect('login');
+        }
+        if ($action === 'review-ai') {
+            if (!$aiConfig || $view !== 'today') {
+                throw new DomainException('Configure a chave OpenRouter para usar o plano com IA.');
+            }
+            if (time() - ($_SESSION['ai_requested_at'] ?? 0) < 20) {
+                http_response_code(429);
+                throw new DomainException('Aguarde 20 segundos entre solicitações de IA.');
+            }
+            $aiData = userData($db, (int) $account['id'], $day);
+            [$context, $taskIds] = aiContext($aiData, plan($aiData, $focus), $focus, $clock);
+            if (!$taskIds) {
+                throw new DomainException('Cadastre pelo menos uma tarefa pendente para gerar o plano.');
+            }
+            $_SESSION['ai_requested_at'] = time();
+            $_SESSION['ai_review'] = ['day' => $day, 'revision' => (int) $account['revision'],
+                'result' => generateAiReview($aiConfig, $context, $taskIds)];
+            header('Location: ' . url('today', $day === $today ? [] : ['date' => $day]) . '#plano-ia', true, 303);
+            exit;
         }
         $_SESSION['notice'] = runAction($db, (int) $account['id'], $action, $day, $clock);
         redirect($view, $day === $today ? [] : ['date' => $day]);
@@ -96,6 +120,13 @@ $notice = $_SESSION['notice'] ?? '';
 unset($_SESSION['notice']);
 $data = $account ? userData($db, (int) $account['id'], $day) : null;
 $summary = $data ? plan($data, $focus) : null;
+$aiReview = null;
+if ($account && $aiConfig && $view === 'today') {
+    $savedReview = $_SESSION['ai_review'] ?? [];
+    if (($savedReview['day'] ?? null) === $day && ($savedReview['revision'] ?? null) === (int) $account['revision']) {
+        $aiReview = $savedReview['result'];
+    }
+}
 $dayRanges = $summary ? rangesOnDay($summary['ranges'], $day, $clock) : [];
 $suggestion = $leisureOption = $restOption = null;
 $leisureAlternative = false;

@@ -52,6 +52,8 @@ h3 { font-size: 1.03rem; line-height: 1.25; }
 .recommendation h3 { font-size: 1.3rem; }
 .recommendation p, .recommendation form { margin-top: 7px; }
 .recommendation .time { font-weight: 730; color: #125e4f; font-variant-numeric: tabular-nums; }
+.ai-steps { padding-left: 22px; margin-bottom: 0; }
+.ai-steps li + li { margin-top: 12px; }
 .holiday { background: #eaf3fd; border-color: #cbddeb; margin-bottom: 16px; color: #244c66; }
 .holiday strong { display: block; font-size: 1.16rem; }
 .holiday p { margin-top: 4px; }

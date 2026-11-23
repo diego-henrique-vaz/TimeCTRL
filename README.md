@@ -41,6 +41,18 @@ Ao abrir um horário recorrente em **Intervalos cadastrados**, use **Salvar só 
 
 As tabelas adicionais são criadas automaticamente no primeiro acesso, inclusive para bancos existentes. Se a conta MariaDB do aplicativo tiver acesso apenas a dados, importe `database/agenda-recorrente.sql` e `database/atividades-concluidas.sql` como administrador antes de abrir a agenda.
 
+### Plano com IA
+
+Em **Meu dia → Plano com IA**, clique em **Gerar plano com IA** para receber uma ordem sugerida e um primeiro passo para até três tarefas pendentes. O TimeCTRL calcula os horários e mantém as reservas sob controle da pessoa. O plano é temporário na sessão e precisa ser gerado novamente após mudanças na conta.
+
+1. Crie uma chave em [OpenRouter → API Keys](https://openrouter.ai/settings/keys). O modelo padrão `openai/gpt-4.1-mini` é pago por uso. Os custos do modelo e os limites da chave são gerenciados no OpenRouter.
+2. Copie `ai.example.php` para `ai.local.php` na raiz do projeto e preencha `key` nesse arquivo. Ele fica fora da pasta `public/` e é ignorado pelo Git. Em um servidor, também é possível fornecer `TIMECTRL_OPENROUTER_KEY` pelo ambiente do processo PHP.
+3. Abra **Meu dia**, cadastre tarefas com dados fictícios e gere o plano. A integração requer internet e a extensão PHP `curl`. Para trocar o modelo, use `model` no arquivo local ou `TIMECTRL_OPENROUTER_MODEL` no ambiente. Escolha um modelo compatível com `json_schema` e disponível em uma rota com retenção zero.
+
+O aplicativo só consulta a API quando você solicita a geração. Envia o dia, o foco, a duração das janelas livres e dados de até seis tarefas pendentes. Os pedidos solicitam rotas ZDR conforme a política da conta do OpenRouter e exigem resposta estruturada. Sem chave ou com falha na API, a agenda e suas sugestões locais continuam disponíveis. Execute `php tests/ai.php` para verificar a integração com respostas simuladas, sem gastar créditos.
+
+[Respostas estruturadas do OpenRouter](https://openrouter.ai/docs/guides/features/structured-outputs) · [Retenção zero](https://openrouter.ai/docs/guides/features/zdr)
+
 As recomendações são calculadas em PHP. O banco guarda contas, dados acadêmicos e preferências. Os avisos aparecem no painel ao consultar ou atualizar o dia. O calendário local cobre os feriados nacionais brasileiros de 2026 classificados no art. 1º da Portaria MGI nº 11.460/2025. Pontos facultativos e feriados locais ficam fora dessa cobertura. A data do feriado não muda a agenda automaticamente.
 
 [Portaria MGI nº 11.460/2025](https://legis.sigepe.gov.br/sigepe-bgp-ws-legis/legis-service/download/?id=0026440285-ALPDF%2F2025)
