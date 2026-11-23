@@ -436,6 +436,47 @@ async function main() {
     assert.equal(await remaining.locator('[data-recommendation=rest]').count(), 0);
     await remainingContext.close();
     console.log('OK tempo livre: lazer e pausa no saldo, duração ajustada e atividade levada ao histórico');
+
+    const workContext = await browser.newContext();
+    const work = await workContext.newPage();
+    await register(work, weekly, 'Ensaio do expediente');
+    await windowForm(work, weekly, '2026-11-24T06:15', '2026-11-24T15:00', 'work', 'Estágio');
+    await windowForm(work, weekly, '2026-11-24T07:30', '2026-11-24T09:00', 'free', 'Janela no estágio');
+    await windowForm(work, weekly, '2026-11-24T08:00', '2026-11-24T08:15', 'busy', 'Reunião');
+    await windowForm(work, weekly, '2026-11-24T15:00', '2026-11-24T17:00', 'free', 'Depois do estágio');
+    const tomorrow = '&date=2026-11-24';
+    await work.goto(at(weekly, 'agenda') + tomorrow);
+    const availability = work.getByRole('heading', {name:'Tempo disponível'}).locator('..');
+    assert.match(await availability.innerText(), /15:00–17:00/);
+    assert.doesNotMatch(await availability.innerText(), /07:30/);
+    const opening = work.locator('details.entry').filter({hasText:'Janela no estágio'});
+    await opening.locator('summary').click();
+    await opening.getByLabel('Tipo').selectOption('work_free');
+    await opening.getByRole('button', {name:'Salvar intervalo'}).click();
+    await work.getByRole('status').getByText('Intervalo atualizado.').waitFor();
+    assert.match(await availability.innerText(), /07:30–08:00[\s\S]+08:15–09:00/);
+
+    await taskForm(work, weekly, 'Adiantar relatório', '2026-11-24T09:00', 30, 3);
+    await interestForm(work, weekly, 'Livro da manhã', 'book', 25);
+    await work.goto(at(weekly, 'today') + tomorrow);
+    assert.match(await work.locator('[data-forecast]').filter({hasText:'Adiantar relatório'}).innerText(), /07:30/);
+    assert.match(await work.locator('[data-leisure-option]').innerText(), /Livro da manhã[\s\S]+08:15–08:40/);
+    await work.locator('[data-forecast]').filter({hasText:'Adiantar relatório'}).getByRole('button', {name:'Aceitar horário'}).click();
+    await work.getByRole('status').getByText('Sugestão adicionada à agenda.').waitFor();
+    assert.equal(await work.locator('[data-alert=conflict]').count(), 0);
+    assert.equal(await work.getByLabel('Sua rotina mudou?').count(), 0);
+    await work.goto(at(weekly, 'today') + '&date=2026-12-25');
+    await work.getByLabel('Sua rotina mudou?').waitFor();
+
+    await windowForm(work, weekly, '2026-11-23T06:15', '2026-11-23T15:00', 'work', 'Estágio');
+    await work.goto(weekly);
+    await work.getByText('Estou livre agora', {exact:true}).click();
+    await form(work, 'free-now').getByRole('button', {name:'Adicionar tempo livre'}).click();
+    await work.getByRole('status').getByText('Tempo livre adicionado à agenda.').waitFor();
+    assert.match(await work.locator('[data-free-minutes]').innerText(), /30\s*min livres agora/);
+    assert.match(await work.locator('[data-recommendation=interest]').innerText(), /Livro da manhã/);
+    await workContext.close();
+    console.log('OK expediente: intervalo planejado, reunião preservada, encaixe de tarefa e leitura, janela imediata e pergunta exclusiva de feriado');
   } catch (error) {
     if (chrome) console.error(chrome.logText().slice(-1200));
     throw error;

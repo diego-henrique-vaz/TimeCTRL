@@ -34,6 +34,15 @@ check(orderedTasks([$a,array_replace($a, ['id'=>4])])[0]['id'] === 1, 'empate de
 check(freeRanges(['windows'=>[$data['windows'][0], ['kind'=>'free','start_at'=>$day.'18:30','end_at'=>$day.'19:00'],
     ['kind'=>'work','start_at'=>$day.'18:10','end_at'=>$day.'18:20']], 'blocks'=>[]])
     === [[$day.'18:00',$day.'18:10'],[$day.'18:20',$day.'19:00']], 'janelas sobrepostas são unidas e trabalho desconta tempo');
+$workHours = ['kind'=>'work','start_at'=>$day.'06:15','end_at'=>$day.'15:00'];
+$break = ['kind'=>'free','start_at'=>$day.'07:30','end_at'=>$day.'09:00'];
+$meeting = ['kind'=>'busy','start_at'=>$day.'08:00','end_at'=>$day.'08:15'];
+check(freeRanges(['windows'=>[$workHours, $break], 'blocks'=>[]]) === [], 'intervalo livre comum não libera o turno');
+$break['kind'] = 'work_free';
+$afterMeeting = ['id'=>1,'start_at'=>$day.'08:30','end_at'=>$day.'08:50'];
+check(freeRanges(['windows'=>[$workHours, $break, $meeting], 'blocks'=>[$afterMeeting]])
+    === [[$day.'07:30',$day.'08:00'],[$day.'08:15',$day.'08:30'],[$day.'08:50',$day.'09:00']],
+    'intervalo livre durante o trabalho respeita reuniões e blocos já marcados');
 $data['blocks'][] = ['id'=>1,'kind'=>'task','item_id'=>2,'title'=>'Relatório','start_at'=>$day.'20:00','end_at'=>$day.'21:30'];
 $data['windows'][] = ['kind'=>'busy','start_at'=>$day.'20:00','end_at'=>$day.'21:30'];
 $result = plan($data, $clock);

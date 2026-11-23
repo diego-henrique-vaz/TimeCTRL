@@ -132,6 +132,14 @@ function activityDate(DateTimeImmutable $clock, string $fallback = ''): string
     return $day;
 }
 
+function windowTitle(string $kind): string
+{
+    if (isFreeWindow($kind) && field('title') === '') {
+        return $kind === 'work_free' ? 'Tempo livre no trabalho' : 'Horário livre';
+    }
+    return requiredText('title', 120);
+}
+
 function registerCompletion(PDO $db, int $uid, string $kind, string $title, int $plannedMinutes, DateTimeImmutable $clock, ?int $interestId = null): void
 {
     $date = activityDate($clock, $clock->format('Y-m-d'));
@@ -233,6 +241,18 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 execute($db, 'DELETE FROM blocks WHERE user_id = ? AND id = ?', [$uid, $id]);
                 $message = 'Atividade concluída e registrada nos Hábitos.';
                 break;
+            case 'free-now':
+                if ($day !== $clock->format('Y-m-d')) {
+                    throw new DomainException('Para liberar tempo agora, abra a agenda de hoje.');
+                }
+                $end = addMinutes($now, number('minutes', 5, 240));
+                if (!one($db, "SELECT id FROM windows WHERE user_id = ? AND kind = 'work_free' AND start_at = ? AND end_at = ?",
+                    [$uid, $now, $end])) {
+                    execute($db, 'INSERT INTO windows (user_id, title, kind, start_at, end_at) VALUES (?, ?, ?, ?, ?)',
+                        [$uid, 'Tempo livre no trabalho', 'work_free', $now, $end]);
+                }
+                $message = 'Tempo livre adicionado à agenda.';
+                break;
             case 'add-window':
             case 'edit-window':
                 $kind = option('kind', WINDOW_TYPES);
@@ -241,7 +261,7 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 if ($end <= $start || duration($start, $end) > 1440) {
                     throw new DomainException('O intervalo deve terminar depois do início e durar até 24 horas.');
                 }
-                $title = $kind === 'free' && field('title') === '' ? 'Horário livre' : requiredText('title', 120);
+                $title = windowTitle($kind);
                 if ($action === 'edit-window') {
                     $id = number('id', 1, PHP_INT_MAX);
                     owned($db, 'windows', $uid, $id);
@@ -255,7 +275,7 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 break;
             case 'save-rule':
                 $kind = option('kind', WINDOW_TYPES);
-                $title = $kind === 'free' && field('title') === '' ? 'Horário livre' : requiredText('title', 120);
+                $title = windowTitle($kind);
                 $weekdays = selectedWeekdays();
                 $first = field('first_day');
                 if (!dateValid($first)) {
@@ -297,7 +317,7 @@ function runAction(PDO $db, int $uid, string $action, string $day, DateTimeImmut
                 }
                 [$start, $end] = $change === 'change' ? shiftTimes() : ['', ''];
                 replaceRow($db, 'window_exceptions', $keys, ['change_kind' => $change, 'start_time' => $start,
-                    'end_time' => $end, 'release_time' => (int) ($rule['kind'] !== 'free' && field('release_time') === '1')]);
+                    'end_time' => $end, 'release_time' => (int) (!isFreeWindow($rule['kind']) && field('release_time') === '1')]);
                 $message = 'Ajuste salvo somente para este dia.';
                 break;
             case 'remove-window':

@@ -8,7 +8,7 @@ const ACTIVITIES = ['work' => 'Trabalho', 'study' => 'Estudo', 'task' => 'Tarefa
     'movie' => 'Filme', 'series' => 'Série', 'anime' => 'Anime', 'rest' => 'Descanso', 'other' => 'Outro lazer'];
 const PRIORITIES = [3 => 'Alta', 2 => 'Normal', 1 => 'Baixa'];
 const ROUTINES = ['usual' => 'Manter a agenda cadastrada', 'works' => 'Vou trabalhar no feriado', 'changed' => 'Minha rotina mudou'];
-const WINDOW_TYPES = ['free' => 'Livre', 'busy' => 'Compromisso', 'work' => 'Trabalho'];
+const WINDOW_TYPES = ['free' => 'Livre', 'work_free' => 'Livre durante o trabalho', 'busy' => 'Compromisso', 'work' => 'Trabalho'];
 const WEEKDAYS = [1 => 'Seg', 2 => 'Ter', 3 => 'Qua', 4 => 'Qui', 5 => 'Sex', 6 => 'Sáb', 7 => 'Dom'];
 const MIN_REST_MINUTES = 5;
 
@@ -53,6 +53,11 @@ function subtract(array $ranges, string $start, string $end): array
         }
     }
     return $remaining;
+}
+
+function isFreeWindow(string $kind): bool
+{
+    return $kind === 'free' || $kind === 'work_free';
 }
 
 function repeatsOn(array $rule, DateTimeImmutable $date): bool
@@ -106,7 +111,7 @@ function recurringAgenda(array $rules, array $exceptions, array $blocks, string 
             if ($key === $day) {
                 $occurrences[] = $window;
             }
-            if ($exception && $exception['release_time'] && $rule['kind'] !== 'free') {
+            if ($exception && $exception['release_time'] && !isFreeWindow($rule['kind'])) {
                 foreach ($skip ? [$original] : subtract([$original], ...$interval) as [$start, $end]) {
                     $recurring_windows[] = ['title' => 'Tempo liberado · ' . $rule['title'], 'kind' => 'free', 'start_at' => $start,
                         'end_at' => $end, 'released' => true];
@@ -119,12 +124,16 @@ function recurringAgenda(array $rules, array $exceptions, array $blocks, string 
 
 function freeRanges(array $data, ?int $ignoreBlock = null): array
 {
-    $ranges = [];
-    $busy = [];
+    $ranges = $work = $workBreaks = $busy = [];
     foreach ($data['windows'] as $window) {
         $interval = [$window['start_at'], $window['end_at']];
-        if ($window['kind'] === 'free') {
+        if (isFreeWindow($window['kind'])) {
             $ranges[] = $interval;
+            if ($window['kind'] === 'work_free') {
+                $workBreaks[] = $interval;
+            }
+        } elseif ($window['kind'] === 'work') {
+            $work[] = $interval;
         } else {
             $busy[] = $interval;
         }
@@ -144,7 +153,10 @@ function freeRanges(array $data, ?int $ignoreBlock = null): array
             $busy[] = [$block['start_at'], $block['end_at']];
         }
     }
-    foreach ($busy as [$start, $end]) {
+    foreach ($workBreaks as [$start, $end]) {
+        $work = subtract($work, $start, $end);
+    }
+    foreach (array_merge($work, $busy) as [$start, $end]) {
         $merged = subtract($merged, $start, $end);
     }
     return $merged;

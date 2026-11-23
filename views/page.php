@@ -199,6 +199,17 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                         <?php fields('hide-choice'); ?><button class="quiet">Dispensar pergunta</button>
                     </form>
                 </details>
+                <?php if ($day === $today): ?>
+                    <details class="entry">
+                        <summary>Estou livre agora</summary>
+                        <form method="post" class="stack" action="<?= h(url($view)) ?>">
+                            <?php fields('free-now'); ?>
+                            <label>Quanto tempo você tem? (min)<input type="number" name="minutes" min="5" max="240" required value="30"></label>
+                            <p class="muted">Abre uma janela a partir de agora, inclusive durante o trabalho. Compromissos e blocos já aceitos continuam ocupando tempo.</p>
+                            <button>Adicionar tempo livre</button>
+                        </form>
+                    </details>
+                <?php endif; ?>
             </section>
         </div>
         <?php if ($scheduledTasks && $freeMinutes): ?>
@@ -358,6 +369,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                 <label>Fim<input type="datetime-local" name="end_at" required value="<?= h($endDefault) ?>"></label>
                 <button>Adicionar à agenda</button>
             </form>
+            <p class="muted window-help">Use <strong>Livre durante o trabalho</strong> para uma pausa ou janela que cai dentro do expediente.</p>
         </section>
         <div class="two-columns">
             <section class="panel lists">
@@ -388,7 +400,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                                     <label>Início neste dia<input type="time" name="start_time" required value="<?= h(substr($event['start_at'], 11)) ?>"></label>
                                     <label>Fim neste dia<input type="time" name="end_time" required value="<?= h(substr($event['end_at'], 11)) ?>"></label>
                                 </div>
-                                <?php if ($event['kind'] !== 'free'): ?>
+                                <?php if (!isFreeWindow($event['kind'])): ?>
                                     <label class="check-option"><input type="checkbox" name="release_time" value="1" <?= !empty($exception['release_time']) ? 'checked' : '' ?>>Marcar o tempo liberado como livre</label>
                                 <?php endif; ?>
                                 <div class="actions">

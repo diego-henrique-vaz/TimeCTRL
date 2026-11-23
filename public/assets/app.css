@@ -61,6 +61,7 @@ h3 { font-size: 1.03rem; line-height: 1.25; }
 .alert-line { color: #743718; background: #fff0e4; }
 .info-line { color: #285366; background: #eef5f7; }
 .muted { color: var(--muted); }
+.window-help { margin-top: 12px; }
 label { display: grid; font-size: .92rem; gap: 4px; font-weight: 650; }
 input, select { max-width: 100%; min-width: 0; width: 100%; border: 1px solid #a8bdbb; border-radius: 7px; background: white; padding: 8px 9px; color: inherit; min-height: 42px; }
 .stack { display: grid; gap: 9px; }

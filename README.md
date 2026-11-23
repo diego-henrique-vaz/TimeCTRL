@@ -35,6 +35,8 @@ Inicie MySQL no painel do XAMPP. Crie um banco `timectrl`, um usuário com acess
 
 Em **Agenda → Rotina semanal**, escolha os dias, os horários e a data inicial. Cadastre turnos de trabalho, compromissos fixos ou janelas livres. As sugestões usam os próximos 90 dias de rotina a partir da data consultada. Para consultar outra data, use as setas ou o seletor da agenda.
 
+Para uma janela de disponibilidade dentro do expediente, escolha **Livre durante o trabalho** ao cadastrar ou editar o intervalo. O mesmo tipo pode entrar na rotina semanal. Ele libera aquele trecho do turno e respeita outros compromissos e blocos aceitos. Se a oportunidade surgir na hora, use **Estou livre agora** em **Meu dia** e informe quantos minutos você tem.
+
 Ao abrir um horário recorrente em **Intervalos cadastrados**, use **Salvar só este dia** para mudar os horários ou **Cancelar só este dia** para pular o compromisso nessa data. Marque **Marcar o tempo liberado como livre** se quiser usar o período retirado para encaixar tarefas ou lazer. Outros compromissos continuam descontando tempo. **Restaurar horário habitual** desfaz o ajuste. Um bloco de tarefa pode ser concluído diretamente pela agenda e devolve o horário reservado ao tempo disponível.
 
 As tabelas adicionais são criadas automaticamente no primeiro acesso, inclusive para bancos existentes. Se a conta MariaDB do aplicativo tiver acesso apenas a dados, importe `database/agenda-recorrente.sql` e `database/atividades-concluidas.sql` como administrador antes de abrir a agenda.
