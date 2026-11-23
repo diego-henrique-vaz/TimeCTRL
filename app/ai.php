@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/ai_local.php';
+
 const AI_MAX_TASKS = 6;
 const AI_MAX_RECOMMENDATIONS = 3;
 
@@ -10,15 +12,19 @@ function aiConfiguration(): ?array
     try {
         $settings = is_file($file) ? require $file : [];
         $key = trim(getenv('TIMECTRL_OPENROUTER_KEY') ?: ($settings['key'] ?? ''));
+        $provider = trim(getenv('TIMECTRL_AI_PROVIDER') ?: ($settings['provider'] ?? ($key !== '' ? 'openrouter' : 'local')));
         $model = trim(getenv('TIMECTRL_OPENROUTER_MODEL') ?: ($settings['model'] ?? 'openai/gpt-4.1-mini'));
     } catch (Throwable) {
         error_log('TimeCTRL IA: configuração local inválida');
         return null;
     }
-    if ($key === '' || preg_match('/\s/', $key) || !preg_match('~^[\w.-]+/[\w.:-]+$~D', $model) || !extension_loaded('curl')) {
+    if ($provider === 'local') {
+        return ['provider' => 'local'];
+    }
+    if ($provider !== 'openrouter' || $key === '' || preg_match('/\s/', $key) || !preg_match('~^[\w.-]+/[\w.:-]+$~D', $model) || !extension_loaded('curl')) {
         return null;
     }
-    return ['key' => $key, 'model' => $model];
+    return ['provider' => 'openrouter', 'key' => $key, 'model' => $model];
 }
 
 function aiContext(array $data, array $plan, DateTimeImmutable $focus, DateTimeImmutable $clock): array
@@ -93,6 +99,9 @@ function openRouterCompletion(string $key, array $payload): array
 
 function generateAiReview(array $config, array $context, array $taskIds, ?callable $completion = null): array
 {
+    if (($config['provider'] ?? '') === 'local') {
+        return generateLocalAiReview($context, $taskIds);
+    }
     $completion ??= openRouterCompletion(...);
     $refs = array_keys($taskIds);
     $response = $completion($config['key'], [

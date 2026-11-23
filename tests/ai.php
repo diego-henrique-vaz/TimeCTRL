@@ -40,6 +40,13 @@ $review = generateAiReview($config, $context, $refs, static function (string $ke
 });
 checkAi($review['items'] === [['id' => 47, 'reason' => $result['reason'], 'step' => $result['first_step']]], 'resposta simulada associa a tarefa e o primeiro passo');
 
+$local = generateAiReview(['provider' => 'local'], $context, $refs,
+    static fn() => throw new RuntimeException('O modo local não deve chamar o transporte HTTP.'));
+checkAi(array_column($local['items'], 'id') === [47, 15] && array_column($local['items'], 'category') === ['Texto e relatório', 'Apresentação'],
+    'classificador local identifica títulos inéditos e ordena pela agenda sem usar HTTP');
+checkAi(classifyLocalAiTask('Xyz Qwerty') === null && classifyLocalAiTask('Revisar exercícios para a prova de redes') === 'estudo'
+    && classifyLocalAiTask('Corrigir erro nos testes da API') === 'tecnica', 'classificador distingue tarefas de estudo, de código e títulos desconhecidos');
+
 foreach ([
     'referência inventada' => $response([array_replace($result, ['ref' => 'T7'])]),
     'referência repetida' => $response([$result, $result]),

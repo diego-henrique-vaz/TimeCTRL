@@ -170,6 +170,10 @@ async function main() {
 
     await page.goto(normal);
     assert.match(await page.locator('[data-free-minutes]').innerText(), /40 min/);
+    await page.getByRole('button', {name:'Gerar plano com IA'}).click();
+    const aiPlan = page.locator('[data-ai-review]');
+    assert.match(await aiPlan.innerText(), /Questionário de redes revisado/);
+    assert.match(await aiPlan.innerText(), /Texto e relatório[\s\S]+Primeiro passo/);
     assert.match(await page.locator('[data-recommendation]').innerText(), /Questionário de redes revisado/);
     const proposed = page.locator('[data-forecast]').filter({hasText:'Relatório de laboratório'});
     assert.match(await proposed.innerText(), /20:00/);

@@ -79,9 +79,9 @@ try {
         }
         if ($action === 'review-ai') {
             if (!$aiConfig || $view !== 'today') {
-                throw new DomainException('Configure a chave OpenRouter para usar o plano com IA.');
+                throw new DomainException('Confira o modo de IA e a configuração local do TimeCTRL.');
             }
-            if (time() - ($_SESSION['ai_requested_at'] ?? 0) < 20) {
+            if ($aiConfig['provider'] === 'openrouter' && time() - ($_SESSION['ai_requested_at'] ?? 0) < 20) {
                 http_response_code(429);
                 throw new DomainException('Aguarde 20 segundos entre solicitações de IA.');
             }
@@ -90,9 +90,11 @@ try {
             if (!$taskIds) {
                 throw new DomainException('Cadastre pelo menos uma tarefa pendente para gerar o plano.');
             }
-            $_SESSION['ai_requested_at'] = time();
+            if ($aiConfig['provider'] === 'openrouter') {
+                $_SESSION['ai_requested_at'] = time();
+            }
             $_SESSION['ai_review'] = ['day' => $day, 'revision' => (int) $account['revision'],
-                'result' => generateAiReview($aiConfig, $context, $taskIds)];
+                'provider' => $aiConfig['provider'], 'result' => generateAiReview($aiConfig, $context, $taskIds)];
             header('Location: ' . url('today', $day === $today ? [] : ['date' => $day]) . '#plano-ia', true, 303);
             exit;
         }
@@ -123,7 +125,8 @@ $summary = $data ? plan($data, $focus) : null;
 $aiReview = null;
 if ($account && $aiConfig && $view === 'today') {
     $savedReview = $_SESSION['ai_review'] ?? [];
-    if (($savedReview['day'] ?? null) === $day && ($savedReview['revision'] ?? null) === (int) $account['revision']) {
+    if (($savedReview['day'] ?? null) === $day && ($savedReview['revision'] ?? null) === (int) $account['revision']
+        && ($savedReview['provider'] ?? null) === $aiConfig['provider']) {
         $aiReview = $savedReview['result'];
     }
 }

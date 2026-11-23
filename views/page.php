@@ -289,14 +289,18 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
         <section class="panel" id="plano-ia">
             <h2>Plano com IA</h2>
             <?php if (!$aiConfig): ?>
-                <p>Configure a chave do OpenRouter no servidor para gerar um plano com IA. As instruções estão no README do projeto.</p>
+                <p>Confira a configuração de IA no README do projeto.</p>
             <?php elseif (!array_filter($data['tasks'], static fn(array $task): bool => !$task['done'])): ?>
                 <p>Cadastre uma tarefa pendente para gerar o plano.</p>
             <?php else: ?>
                 <form class="stack" method="post" action="<?= h(url('today', $dayArg)) ?>#plano-ia">
                     <?php fields('review-ai'); ?>
                     <p>Sugere o que priorizar e um primeiro passo para cada tarefa escolhida. Os horários vêm da agenda.</p>
-                    <p class="muted">Ao gerar, o OpenRouter recebe títulos, prazos, duração e prioridade de até seis tarefas, o foco do dia e a duração das janelas livres.</p>
+                    <?php if (($aiConfig['provider'] ?? '') === 'local'): ?>
+                        <p class="muted">IA local gratuita. O classificador identifica o tipo de tarefa a partir do título e usa o planejamento do dia.</p>
+                    <?php else: ?>
+                        <p class="muted">Ao gerar, o OpenRouter recebe títulos, prazos, duração e prioridade de até seis tarefas, o foco do dia e a duração das janelas livres.</p>
+                    <?php endif; ?>
                     <button>Gerar plano com IA</button>
                 </form>
                 <?php if ($aiReview): ?>
@@ -308,6 +312,7 @@ $endDefault = inputStamp(addMinutes(str_replace('T',' ', $startDefault), 30));
                             <?php foreach ($aiReview['items'] as $item): ?>
                                 <?php $task = $byId[$item['id']] ?? null; if (!$task || $task['done']) continue; ?>
                                 <li><strong><?= h($task['title']) ?></strong>
+                                    <?php if (isset($item['category'])): ?><span class="tag"><?= h($item['category']) ?></span><?php endif; ?>
                                     <p><?= h($item['reason']) ?></p>
                                     <p><strong>Primeiro passo</strong> · <?= h($item['step']) ?></p>
                                     <?php if (isset($localSlots[$item['id']])): ?>
